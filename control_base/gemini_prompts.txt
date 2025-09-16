@@ -1,0 +1,2 @@
+1. Firmware Device ID Mismatch Issue - RTU simple_server and simple_client having dummy receiver and dummy viewer
+2.  
