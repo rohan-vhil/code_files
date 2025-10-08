@@ -25,22 +25,21 @@ class DeviceStatusReporter:
             self.logger.addHandler(handler)
 
     def check_and_report(self):
-        if not hasattr(ctrl, 'devices') or not ctrl.devices:
-            self.logger.info("No devices available in ctrl to check status.")
-            return
-
         status_changes = {}
-        for device_id, device in ctrl.devices.items():
-            try:
-                modbusmasterapi.getModbusData(device)
-                current_status = "offline" if device.read_error else "online"
-            except Exception as e:
-                self.logger.error(f"An unexpected error occurred while processing device {device_id}: {e}")
-                current_status = "offline"
-            
-            if self.last_known_statuses.get(device_id) != current_status:
-                self.logger.info(f"STATUS CHANGE: Device '{device_id}' is now {current_status}.")
-                status_changes[device_id] = current_status
+        
+        if hasattr(ctrl, 'device_list') and ctrl.device_list:
+            for device in ctrl.device_list:
+                device_id = device.device_id
+                try:
+                    modbusmasterapi.getModbusData(device)
+                    current_status = "offline" if device.read_error else "online"
+                except Exception as e:
+                    self.logger.error(f"An unexpected error occurred while processing device {device_id}: {e}")
+                    current_status = "offline"
+                
+                if self.last_known_statuses.get(device_id) != current_status:
+                    self.logger.info(f"STATUS CHANGE: Device '{device_id}' is now {current_status}.")
+                    status_changes[device_id] = current_status
         
         if not status_changes:
             return
