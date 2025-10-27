@@ -63,7 +63,7 @@ class DeviceStatusReporter:
 
         while True:
             self.check_and_report()
-            time.sleep(self.poll_interval)
+            time.sleep(self.poll_interval) 
 
 
 

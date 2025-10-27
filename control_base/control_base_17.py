@@ -33,7 +33,7 @@ mqtt_ip: str = "test.mosquitto.org"
 controller_id: str
 per_phase_data =['V','I','P','Q','S','En']
 
-agg_data = ['Pf','total_power','total_energy','total_voltage','acfreq','temperature','apparent_power','reactive_power','input_power',"SoC","SoH",'current','import_energy','export_energy','irradiance','ambient_temperature','internal_ambient_temperature','module_temperature','internal_module_temperature']
+agg_data = ['Pf','total_power','total_energy','total_voltage','acfreq','temperature','apparent_power','reactive_power','input_power',"SoC","SoH",'current','import_energy','export_energy','irradiance','ambient_temperature','internal_ambient_temperature','module_temperature','internal_module_temperature','wind_direction','wind_speed','humidity','solar_radition','rain_gauge']
 data_decode = {
     "V" : "voltage",
     "I" : "current",
