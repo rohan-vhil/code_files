@@ -1,4 +1,6 @@
 '''
+----- Python Device Status Reporter - *updated* -----
+
 Based on your new requirement, the device status should be determined by the success or failure of a Modbus read operation. If there's an error reading the device, it's considered "offline"; otherwise, it's "online".
 
 Here is the updated device_status_reporter.py code. It maintains the original structure and naming while incorporating the new logic using your modbusmasterapi.py script.'''
