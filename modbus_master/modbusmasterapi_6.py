@@ -1,7 +1,7 @@
 '''Modbus API Code Review and Update
-For hr (Holding Registers) and ir (Input Registers), the raw data will be a list of 16-bit integers (register values).
-
-For di (Discrete Inputs) and co (Coils), the raw data will be a list of booleans (True/False)'''
+coil status write inside writeDataToControlRegisters so replace
+that only and make a separate function for writing coil status which
+is similar to the writeDataToControlRegisters function'''
 
 
 import sys
@@ -139,21 +139,37 @@ class modbusTCPDevice(ctrl.systemDevice):
                 logging.error(f"Unable to write data due to exception: {e}")
                 self.close_connection()
 
+    def writeCoilStatus(self, coil_data):
+        try:
+            if not self.mbus_client.is_socket_open():
+                self.connect()
+
+            if self.device_connected:
+                self.mbus_client.write_coil(coil_data["address"], coil_data["value"], slave=self.slave_id)
+            else:
+                logging.warning(f"Unable to write coil status: device {self.modbusTCP_comm_details.ip} is not connected.")
+        except KeyError as e:
+            logging.error(f"Missing key in coil data dictionary: {e}")
+        except ModbusIOException as e:
+            logging.error(f"Modbus write error: {e}")
+            self.close_connection()
+        except Exception as e:
+            logging.error(f"Unable to write coil status due to exception: {e}")
+            self.close_connection()
+
     def writeDataToCtrlRegisters(self, reg_data):
         try:
             if not self.mbus_client.is_socket_open():
                 self.connect()
+
             if self.device_connected:
-                if reg_data["type"] == "co":
-                    self.mbus_client.write_coil(reg_data["address"], reg_data["value"], slave=self.slave_id)
-                else:
-                    builder = BinaryPayloadBuilder(byteorder=getattr(Endian, reg_data["bo"]), wordorder=getattr(Endian, reg_data["wo"]))
-                    attribute = getattr(builder, reg_data["format"])
-                    attribute(int(reg_data["value"]))
-                    payload = builder.build()
-                    self.mbus_client.write_register(
-                            reg_data["address"], payload[0], skip_encode=True, slave=self.slave_id
-                        )
+                builder = BinaryPayloadBuilder(byteorder=getattr(Endian, reg_data["bo"]), wordorder=getattr(Endian, reg_data["wo"]))
+                attribute = getattr(builder, reg_data["format"])
+                attribute(int(reg_data["value"]))
+                payload = builder.build()
+                self.mbus_client.write_register(
+                        reg_data["address"], payload[0], skip_encode=True, slave=self.slave_id
+                    )
             else:
                 logging.warning(f"Unable to write control data: device {self.modbusTCP_comm_details.ip} is not connected.")
         except KeyError as e:
@@ -217,16 +233,31 @@ class modbusRTUDevice(ctrl.systemDevice):
         except Exception as e:
             logging.error(f"Unable to write data due to exception: {e}")
 
+    def writeCoilStatus(self, coil_data):
+        try:
+            if not self.mbus_client.is_socket_open():
+                self.connect()
+
+            if self.device_connected:
+                self.mbus_client.write_coil(coil_data["address"], coil_data["value"], slave=self.slave_id)
+            else:
+                logging.warning(f"Unable to write coil status: device {self.modbusRTU_comm_details.port} is not connected.")
+        except KeyError as e:
+            logging.error(f"Missing key in coil data dictionary: {e}")
+        except ModbusIOException as e:
+            logging.error(f"Modbus write error: {e}")
+            self.close_connection()
+        except Exception as e:
+            logging.error(f"Unable to write coil status due to exception: {e}")
+            self.close_connection()
+
     def writeDataToCtrlRegisters(self, reg_data):
         try:
-            if reg_data["type"] == "co":
-                self.mbus_client.write_coil(reg_data["address"], reg_data["value"], slave=self.slave_id)
-            else:
-                builder = BinaryPayloadBuilder(byteorder=getattr(Endian, reg_data["bo"]), wordorder=getattr(Endian, reg_data["wo"]))
-                attribute = getattr(builder, reg_data["format"])
-                attribute(int(reg_data["value"]))
-                payload = builder.build()
-                self.mbus_client.write_register(reg_data["address"], payload[0], skip_encode=True, unit=0, slave=0)
+            builder = BinaryPayloadBuilder(byteorder=getattr(Endian, reg_data["bo"]), wordorder=getattr(Endian, reg_data["wo"]))
+            attribute = getattr(builder, reg_data["format"])
+            attribute(int(reg_data["value"]))
+            payload = builder.build()
+            self.mbus_client.write_register(reg_data["address"], payload[0], skip_encode=True, unit=0, slave=0)
         except KeyError as e:
             logging.error(f"Missing key in control data dictionary: {e}")
         except AttributeError as e:
@@ -280,13 +311,8 @@ def getData(addrmap:dict,device:Union[modbusRTUDevice, modbusTCPDevice]):
             elif reg_type == "hr":
                 read_func = device.mbus_client.read_holding_registers
             elif reg_type == "di":
-                # Discrete Inputs are single-bit, the pymodbus function is read_discrete_inputs
                 read_func = device.mbus_client.read_discrete_inputs
-                # For coils/discrete inputs, MAX_LENGTH is 2000, but keeping 125 for safety and consistency with registers.
-                # However, for pymodbus 3.7.4, the general register read logic is simpler to maintain.
-                # The response object for coils/discrete inputs has a 'bits' attribute, not 'registers'.
             elif reg_type == "co":
-                # Coils are single-bit, the pymodbus function is read_coils
                 read_func = device.mbus_client.read_coils
             else:
                 logging.warning(f"Unknown register type: {reg_type}. Skipping block '{block}'.")

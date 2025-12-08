@@ -72,11 +72,33 @@ def readDeviceList():
 
             except Exception as e:
                 print(f"Unexpected error: {e}")
+            livedataurl = "https://app.enercog.com/ui/no-auth/start-live-data"
 
     with open(install_file_path) as installer_file:
         installer_cfg = json.load(installer_file)
     ctrl.site_id = installer_cfg["site id"]
     ctrl.controller_id = str(gma())
+
+    try:
+        payload = {"project_code": installer_cfg["site id"]}
+        livedataurl = "https://app.enercog.com/ui/no-auth/start-live-data"
+        session = requests.Session()
+        retries = Retry(
+            total=5,
+            backoff_factor=1,
+            status_forcelist=[500, 502, 503, 504],
+            allowed_methods=["POST"]
+        )
+        adapter = HTTPAdapter(max_retries=retries)
+        session.mount("https://", adapter)
+        session.mount("http://", adapter)
+
+        response = session.post(url=livedataurl, json=payload, verify=False)
+        print(f"Response status of LiveDataRestart: {response.status_code}")
+        print(f"Response body: {response.text}")
+
+    except Exception as e:
+        print(f"Unexpected error: {e}")
 
     global number_of_devices
     number_of_devices = len(installer_cfg["device_list"])
