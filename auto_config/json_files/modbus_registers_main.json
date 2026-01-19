@@ -1,0 +1,643 @@
+{
+
+    "UMG104":{
+        "block1":{
+            "byteorder": "BIG",
+            "wordorder": "BIG",
+            "registers": "ir",
+            "start_address": 19000,
+            "Length": 120,
+            "data":{
+                "L1_voltage":{
+                    "size":2,
+                    "offset":0,
+                    "format":"FLOAT32",
+                    "s_f":"NA",
+                    "m_f":"NA"
+                },
+                "L2_voltage":{
+                    "size":2,
+                    "offset":2,
+                    "format":"FLOAT32",
+                    "s_f":"NA",
+                    "m_f":"NA"
+                },
+                "L3_voltage":{
+                    "size":2,
+                    "offset":4,
+                    "format":"FLOAT32",
+                    "s_f":"NA",
+                    "m_f":"NA"
+                },
+                "L1_power":{
+                    "size":2,
+                    "offset":20,
+                    "format":"FLOAT32",
+                    "s_f":"NA",
+                    "m_f":"NA"
+                },
+                "L2_power":{
+                    "size":2,
+                    "offset":22,
+                    "format":"FLOAT32",
+                    "s_f":"NA",
+                    "m_f":"NA"
+                },
+                "L3_power":{
+                    "size":2,
+                    "offset":24,
+                    "format":"FLOAT32",
+                    "s_f":"NA",
+                    "m_f":"NA"
+                },
+                "total_power":{
+                    "size":2,
+                    "offset":26,
+                    "format":"FLOAT32",
+                    "s_f":"NA",
+                    "m_f":"NA"
+                },
+                "L1_energy":{
+                    "size":2,
+                    "offset":62,
+                    "format":"FLOAT32",
+                    "s_f":"NA",
+                    "m_f":"NA"
+                },
+                "L2_energy":{
+                    "size":2,
+                    "offset":64,
+                    "format":"FLOAT32",
+                    "s_f":"NA",
+                    "m_f":"NA"
+                },
+                "L3_energy":{
+                    "size":2,
+                    "offset":66,
+                    "format":"FLOAT32",
+                    "s_f":"NA",
+                    "m_f":"NA"
+                },
+                "acfreq":{
+                    "size":2,
+                    "offset":50,
+                    "format":"FLOAT32",
+                    "s_f":"NA",
+                    "m_f":"NA"
+                }
+                
+            }
+        }
+    },
+    "sungrow":{
+        "block1":{
+            "byteorder": "BIG",
+            "wordorder": "BIG",
+            "registers": "ir",
+            "start_address": 5000,
+            "Length": 150,
+            "data":{
+                "L1_voltage":{
+                    "size":1,
+                    "offset":19,
+                    "format":"UINT16",
+                    "s_f":"NA",
+                    "m_f":0.1
+                },
+                "L2_voltage":{
+                    "size":1,
+                    "offset":20,
+                    "format":"UINT16",
+                    "s_f":"NA",
+                    "m_f":0.1
+                },
+                "L3_voltage":{
+                    "size":1,
+                    "offset":21,
+                    "format":"UINT16",
+                    "s_f":"NA",
+                    "m_f":0.1
+                },
+                "L1_power":{
+                    "size":2,
+                    "offset":85,
+                    "format":"INT32",
+                    "s_f":"NA",
+                    "m_f":"NA"
+                },
+                "L2_power":{
+                    "size":2,
+                    "offset":87,
+                    "format":"INT32",
+                    "s_f":"NA",
+                    "m_f":"NA"
+                },
+                "L3_power":{
+                    "size":2,
+                    "offset":89,
+                    "format":"INT32",
+                    "s_f":"NA",
+                    "m_f":"NA"
+                },
+
+                "acfreq":{
+                    "size":1,
+                    "offset":36,
+                    "format":"UINT16",
+                    "s_f":"NA",
+                    "m_f":0.1
+                },
+
+                "total_power":{
+                    "size":2,
+                    "offset":144,
+                    "format":"UINT32",
+                    "s_f":"NA",
+                    "m_f":0.1
+                }
+                
+            }
+        }
+    },
+    "MFM376":{
+        "block1":{
+            "byteorder": "BIG",
+            "wordorder": "BIG",
+            "registers": "ir",
+            "start_address": 30000,
+            "Length": 150,
+            "data":{
+                "L1_voltage":{
+                    "size":2,
+                    "offset":0,
+                    "format":"FLOAT32",
+                    "s_f":"NA",
+                    "m_f":"NA"
+                },
+                "L2_voltage":{
+                    "size":2,
+                    "offset":2,
+                    "format":"FLOAT32",
+                    "s_f":"NA",
+                    "m_f":"NA"
+                },
+                "L3_voltage":{
+                    "size":2,
+                    "offset":4,
+                    "format":"FLOAT32",
+                    "s_f":"NA",
+                    "m_f":"NA"
+                },
+                "L1_current":{
+                    "size":2,
+                    "offset":16,
+                    "format":"FLOAT32",
+                    "s_f":"NA",
+                    "m_f":"NA"
+                },
+                "L2_current":{
+                    "size":2,
+                    "offset":18,
+                    "format":"FLOAT32",
+                    "s_f":"NA",
+                    "m_f":"NA"
+                },
+                "L3_current":{
+                    "size":2,
+                    "offset":20,
+                    "format":"FLOAT32",
+                    "s_f":"NA",
+                    "m_f":"NA"
+                },
+                "L1_power":{
+                    "size":2,
+                    "offset":24,
+                    "format":"FLOAT32",
+                    "s_f":"NA",
+                    "m_f":"NA"
+                },
+                "L2_power":{
+                    "size":2,
+                    "offset":26,
+                    "format":"FLOAT32",
+                    "s_f":"NA",
+                    "m_f":"NA"
+                },
+                "L3_power":{
+                    "size":2,
+                    "offset":28,
+                    "format":"FLOAT32",
+                    "s_f":"NA",
+                    "m_f":"NA"
+                },
+                "total_power":{
+                    "size":2,
+                    "offset":52,
+                    "format":"FLOAT32",
+                    "s_f":"NA",
+                    "m_f":"NA"
+                }
+               
+                
+            }
+        }
+    },
+    "growatt":{
+        "block1":{
+            "byteorder": "BIG",
+            "wordorder": "BIG",
+            "registers": "ir",
+            "start_address": 0,
+            "Length": 50,
+            "data":{
+                "total_power":{
+                    "size":2,
+                    "offset":35,
+                    "format":"UINT32",
+                    "s_f":"NA",
+                    "m_f":0.1
+                },
+                "L1_power":{
+                    "size":2,
+                    "offset":40,
+                    "format":"UINT32",
+                    "s_f":"NA",
+                    "m_f":0.1
+                },
+                "L2_power":{
+                    "size":2,
+                    "offset":44,
+                    "format":"UINT32",
+                    "s_f":"NA",
+                    "m_f":0.1
+                },
+                "L3_power":{
+                    "size":2,
+                    "offset":48,
+                    "format":"UINT32",
+                    "s_f":"NA",
+                    "m_f":0.1
+                },
+                "L1_voltage":{
+                    "size":1,
+                    "offset":38,
+                    "format":"UINT16",
+                    "s_f":"NA",
+                    "m_f":0.1
+                },
+                "L2_voltage":{
+                    "size":1,
+                    "offset":42,
+                    "format":"UINT16",
+                    "s_f":"NA",
+                    "m_f":0.1
+                },
+                "L3_voltage":{
+                    "size":1,
+                    "offset":46,
+                    "format":"UINT16",
+                    "s_f":"NA",
+                    "m_f":0.1
+                },
+                "acfreq":{
+                    "size":1,
+                    "offset":37,
+                    "format":"UINT16",
+                    "s_f":"NA",
+                    "m_f":0.01
+                }
+            }
+        }
+    },
+
+    "Pro EM-50": {
+        "block1": {
+            "byteorder": "BIG",
+            "wordorder": "BIG",
+            "registers": "ir",
+            "start_address": 2000,
+            "Length": 20,
+            "data": {
+                "Timestamp": {
+                    "size": 2,
+                    "offset": 0,
+                    "format": "UINT32",
+                    "s_f": "NA",
+                    "m_f": "NA"
+                },
+                "error": {
+                    "size": 1,
+                    "offset": 2,
+                    "format": "INT16",
+                    "s_f": "NA",
+                    "m_f": "NA"
+                },
+                "L1_voltage": {
+                    "size": 2,
+                    "offset": 3,
+                    "format": "FLOAT32",
+                    "s_f": "NA",
+                    "m_f": "NA"
+                },
+                "L1_current": {
+                    "size": 2,
+                    "offset": 5,
+                    "format": "FLOAT32",
+                    "s_f": "NA",
+                    "m_f": "NA"
+                },
+                "total_power": {
+                    "size": 2,
+                    "offset": 7,
+                    "format": "FLOAT32",
+                    "s_f": "NA",
+                    "m_f": "NA"
+                },
+                "apparent_power": {
+                    "size": 2,
+                    "offset": 9,
+                    "format": "FLOAT32",
+                    "s_f": "NA",
+                    "m_f": "NA"
+                },
+                "power_factor": {
+                    "size": 2,
+                    "offset": 11,
+                    "format": "FLOAT32",
+                    "s_f": "NA",
+                    "m_f": "NA"
+                },
+                "EM1 Overpower error": {
+                    "size": 1,
+                    "offset": 13,
+                    "format": "INT16",
+                    "s_f": "NA",
+                    "m_f": "NA"
+                },
+                "EM1 Overvoltage error": {
+                    "size": 1,
+                    "offset": 14,
+                    "format": "INT16",
+                    "s_f": "NA",
+                    "m_f": "NA"
+                },
+                "EM1 Overcurrent error": {
+                    "size": 1,
+                    "offset": 15,
+                    "format": "INT16",
+                    "s_f": "NA",
+                    "m_f": "NA"
+                }
+            }
+        }
+    },
+    "sunbird_3000_inverter":{
+        "block1":{
+            "byteorder": "BIG",
+            "wordorder": "BIG",
+            "registers": "hr",
+            "start_address": 40000,
+            "Length": 150,
+            "data":{
+                "total_power":{
+                    "size":1,
+                    "offset":39,
+                    "format":"INT16",
+                    "s_f":"NA",
+                    "m_f":0.01
+                },
+                "total_energy":{
+                    "size":2,
+                    "offset":70,
+                    "format":"INT32",
+                    "s_f":"NA",
+                    "m_f":1
+                },
+                "acfreq":{
+                    "size":1,
+                    "offset":40,
+                    "format":"INT16",
+                    "s_f":"NA",
+                    "m_f":0.01
+                },
+                "temperature":{
+                    "size":1,
+                    "offset":41,
+                    "format":"INT16",
+                    "s_f":"NA",
+                    "m_f":0.1
+                }
+            }
+        }
+    },
+    "sunbird_3000_grid":{
+        "block1":{
+            "byteorder": "BIG",
+            "wordorder": "BIG",
+            "registers": "hr",
+            "start_address": 40000,
+            "Length": 10,
+            "data":{
+                "total_power":{
+                    "size":1,
+                    "offset":42,
+                    "format":"INT16",
+                    "s_f":"NA",
+                    "m_f":0.1
+                }
+            }
+        }
+        
+    },
+    "sunbird_3000_battery":{
+        "block1":{
+            "byteorder": "BIG",
+            "wordorder": "BIG",
+            "registers": "hr",
+            "start_address": 40043,
+            "Length": 10,
+            "data":{
+                "total_voltage":{
+                    "size":1,
+                    "offset":0,
+                    "format":"INT16",
+                    "s_f":"NA",
+                    "m_f":0.1
+                },
+                "total_power":{
+                    "size":1,
+                    "offset":1,
+                    "format":"INT16",
+                    "s_f":"NA",
+                    "m_f":0.1
+                },
+                "current":{
+                    "size":1,
+                    "offset":2,
+                    "format":"INT16",
+                    "s_f":"NA",
+                    "m_f":0.1
+                }
+            }
+        }
+    },
+        "SMA_storage": {
+        "block1": {
+            "registers": "hr",
+            "byteorder": "BIG",
+            "wordorder": "BIG",
+            "start_address": 40096,
+            "Length": 153,
+            "data": {
+                "total_power": {
+                    "size": 1,
+                    "offset": 10,
+                    "format": "INT16",
+                    "s_f": "w_sf"
+                },
+                "w_sf":{
+                    "size": 1,
+                    "offset": 116,
+                    "format": "INT16",
+                    "s_f": "NA",
+                    "m_f": "NA"
+                },
+                "total_energy": {
+                    "size": 4,
+                    "offset": 19,
+                    "format": "UINT64",
+                    "s_f": "wh_sf",
+                    "m_f": "NA"
+                },
+                "wh_sf":{
+                    "size": 1,
+                    "offset": 120,
+                    "format": "INT16",
+                    "s_f": "NA",
+                    "m_f": "NA"
+                
+                }
+            }
+        }
+    },
+    "M70A":{
+        "block1":{
+            "byteorder": "BIG",
+            "wordorder": "BIG",
+            "registers": "ir",
+            "start_address": 49151,
+            "Length": 15,
+            "data":{
+                "total_power":{
+                    "size":1,
+                    "offset":0,
+                    "format":"UINT16",
+                    "s_f":"NA",
+                    "m_f":10
+                },
+                "L1_voltage":{
+                    "size":1,
+                    "offset":1,
+                    "format":"UINT16",
+                    "s_f":"NA",
+                    "m_f":0.1
+                },
+                "L2_voltage":{
+                    "size":1,
+                    "offset":5, 
+                    "format":"UINT16",
+                    "s_f":"NA",
+                    "m_f":0.1
+                },
+                "L3_voltage":{
+                    "size":1,
+                    "offset":9,
+                    "format":"UINT16",
+                    "s_f":"NA",
+                    "m_f":0.1
+                },
+                "L1_current":{
+                    "size":1,
+                    "offset":2,
+                    "format":"UINT16",
+                    "s_f":"NA",
+                    "m_f":0.01
+                },
+                "L2_current":{
+                    "size":1,
+                    "offset":6,
+                    "format":"UINT16",
+                    "s_f":"NA",
+                    "m_f":0.01
+                },
+                "L3_current":{
+                    "size":1,
+                    "offset":10,
+                    "format":"UINT16",
+                    "s_f":"NA",
+                    "m_f":0.01
+                },
+                "L1_power":{
+                    "size":1,
+                    "offset":3,
+                    "format":"UINT16",
+                    "s_f":"NA",
+                    "m_f":10
+                },
+                "L2_power":{
+                    "size":1,
+                    "offset":7,
+                    "format":"UINT16",
+                    "s_f":"NA",
+                    "m_f":10
+                },
+                "L3_power":{
+                    "size":1,
+                    "offset":11,
+                    "format":"UINT16",
+                    "s_f":"NA",
+                    "m_f":10
+                },
+                "acfreq":{
+                    "size":1,
+                    "offset":4,
+                    "format":"UINT16",
+                    "s_f":"NA",
+                    "m_f":0.01
+                }
+            }
+        },
+        "block2":{
+            "byteorder": "BIG",
+            "wordorder": "LITTLE",
+            "registers": "ir",
+            "start_address": 1075,
+            "Length": 3,
+            "data":{
+                "total_energy":{
+                    "size":2,
+                    "offset":0,
+                    "format":"decode_32bit_uint",
+                    "s_f":"NA",
+                    "m_f":0.1
+                }
+            }
+        },
+        "block3":{
+            "byteorder": "BIG",
+            "wordorder": "LITTLE",
+            "registers": "ir",
+            "start_address": 3071,
+            "Length": 3,
+            "data":{
+                "fault":{
+                    "size":1,
+                    "offset":0,
+                    "format":"decode_16bit_uint",
+                    "s_f":"NA",
+                    "m_f":"NA"
+                }
+            }
+        }
+    }
+}

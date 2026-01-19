@@ -1,0 +1,25 @@
+{
+    "mode" : <mode_name>,
+    "op_details" : {
+        "ref" : <int>,
+        "soc_max" : <int>,
+        "soc_min" : <int>,
+        "charge_rate_max" : <int>,
+        "discharge_rate_max" : <int>,
+        "allow_grid_charging" : <bool>,
+        "allow_battery_to_grid" : <bool>,
+        "rates" : [<list of 24 numbers , each representing hourly rate>],
+        "schedule"  : [
+            {
+                "start_time" : <int>,
+                "end_time" : <int>,
+                "setpoint" : <battery charge/ discharge spercentage>
+            },{
+                "start_time" : <int>,
+                "end_time" : <int>,
+                "setpoint" : <battery charge/ discharge spercentage>
+            }
+        ]
+    },
+
+}

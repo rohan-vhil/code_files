@@ -1,4 +1,7 @@
 '''Optimized Approach: Broadcast Scan
+Device Detection and Identification
+https://gemini.google.com/share/cef3852e2680
+
 The refined approach uses a dynamic, two-step process to cut down the S (Slave ID) factor:
 
 Port/Baud/Parity Pre-Scan: The outermost loops remain the same, as they are mandatory for serial communication.

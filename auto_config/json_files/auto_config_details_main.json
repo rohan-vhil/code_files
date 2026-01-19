@@ -1,0 +1,20 @@
+{
+    "devices" :
+    {
+        "growatt" : {
+            "input" : {
+                "param_list" : ["L1_voltage","L2_voltage","L3_voltage","acfreq"]
+            },
+            "holding" : {
+                "param_list" : []
+            }
+
+        }
+    },
+    "param_range" : {
+        "L1_voltage" : [190,300],
+        "L2_voltage" : [190,300],
+        "L3_voltage" : [190,300],
+        "acfreq" : [49,51]
+    }
+}

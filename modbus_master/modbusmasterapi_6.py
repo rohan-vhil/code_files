@@ -1,4 +1,5 @@
 '''Modbus API Code Review and Update
+https://gemini.google.com/share/981f7c3a0818
 coil status write inside writeDataToControlRegisters so replace
 that only and make a separate function for writing coil status which
 is similar to the writeDataToControlRegisters function'''
