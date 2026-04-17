@@ -122,7 +122,7 @@
             "wordorder": "BIG",
             "registers": "hr",
             "start_address": 2999,
-            "Length": 116,
+            "Length": 112,
             "data":{
                 "L1_voltage":{
                     "size":2,
@@ -239,12 +239,19 @@
             "byteorder": "BIG",
             "wordorder": "BIG",
             "registers": "hr",
-            "start_address": 3207,
+            "start_address": 3203,
             "Length": 8,
             "data":{
-                "total_energy":{
+                "export_energy":{
                     "size":4,
                     "offset":0,
+                    "format":"decode_64bit_uint",
+                    "s_f":"NA",
+                    "m_f":0.001
+                },
+                "import_energy":{
+                    "size":4,
+                    "offset":4,
                     "format":"decode_64bit_uint",
                     "s_f":"NA",
                     "m_f":0.001
@@ -259,7 +266,7 @@
             "wordorder": "LITTLE",
             "registers": "hr",
             "start_address": 107,
-            "Length": 4,
+            "Length": 12,
             "data":{
                 "L1_voltage":{
                     "size":2,
@@ -333,21 +340,28 @@
                 },
                 "reactive_power":{
                     "size":2,
-                    "offset":68,
+                    "offset":48,
                     "format":"decode_32bit_float",
                     "s_f":"NA",
                     "m_f":1000
                 },
                 "apparent_power":{
                     "size":2,
-                    "offset":76,
+                    "offset":56,
                     "format":"decode_32bit_float",
                     "s_f":"NA",
                     "m_f":1000
                 },
                 "acfreq":{
                     "size":2,
-                    "offset":110,
+                    "offset":64,
+                    "format":"decode_32bit_float",
+                    "s_f":"NA",
+                    "m_f":"NA"
+                },
+                "power_factor":{
+                    "size":2,
+                    "offset":32,
                     "format":"decode_32bit_float",
                     "s_f":"NA",
                     "m_f":"NA"

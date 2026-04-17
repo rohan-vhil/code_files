@@ -1,0 +1,1252 @@
+'''Control Base Code Update
+https://gemini.google.com/share/5d09a41daae0
+
+I updated the nested loop inside getAllData() that processes component_data.
+Instead of directly appending the raw rounded value to the final dictionary, I temporarily stored it in a variable named val. I then added an if statement to check if the parameter currently being processed is either 'string_current' or 'mppt_current'. If it is, and the value is greater than 100, the code overrides val to 0.0 before adding it to your data payload.
+'''
+
+
+import enum
+import math
+import logging
+import time
+from control import error_reporting as err
+from control import control_der as ctrl_der
+from modbus_master import modbusmasterapi as mbus
+import platform
+import sys
+from pymodbus.payload import BinaryPayloadDecoder
+from pymodbus.payload import BinaryPayloadBuilder
+from pymodbus.constants import Endian
+import sys
+sys.path.insert(0,'../')
+import json
+import path_config
+import datetime
+import os
+
+default_Ts = 3
+default_Ki = 0.0001
+default_Kp = 0.00001
+
+
+vpp_id: int = 0
+site_id: int = 0
+mqtt_ip: str = "test.mosquitto.org"
+controller_id: str
+per_phase_data =['V','I','P','Q','S','En','VTHD','ITHD']
+
+agg_data = ['power_factor','total_power','total_energy','today_energy','total_voltage','acfreq','temperature','apparent_power','reactive_power','input_power',"SoC","SoH",'current','import_energy','export_energy','irradiance','ambient_temperature','internal_ambient_temperature','module_temperature','internal_module_temperature','wind_direction','wind_speed','humidity','solar_radition','rain_gauge','global_horizontal_irradiance','global_tilt_irradiance','maximum_charging_power','maximum_discharging_power','maximum_cell_voltage','cell_number_with_maximum_voltage','minimum_cell_voltage','cell_number_with_minimum_voltage']
+data_decode = {
+    "V" : "voltage",
+    "I" : "current",
+    "P" : "power",
+    "Q" : "Q",
+    "S" : "S",
+    "En" : "energy",
+    "VTHD" : "voltage_thd",
+    "ITHD" : "current_thd"
+}
+fault_data = ['fault','warning']
+battery_data = []
+device_status_data = ['device_state']
+wns_data = []
+di_do_data = ["HT_Breaker"]
+component_data = {
+    "mppt_voltage": [],
+    "mppt_current": [],
+    "mppt_power": [],
+    "string_voltage": [],
+    "string_current": [],
+    "string_power": [],
+    "cell_voltage": []
+}
+
+path_config.path_cfg = path_config.pathConfig()
+CONTROL_JSON_PATH = os.path.join(path_config.path_cfg.base_path, 'control', 'control.json')
+COST_JSON_PATH = os.path.join(path_config.path_cfg.base_path, 'control', 'cost.json')
+ENERGY_LOG_PATH = os.path.join(path_config.path_cfg.base_path, 'control', 'total_energy_log.json')
+
+class deviceType(enum.IntEnum):
+    solar = 0
+    battery = 1
+    meter = 2
+    EV = 3
+    DG=4
+    grid = 5
+    IO = 6
+    load = 7
+
+    @classmethod
+    def from_param(cls, obj):
+        return int(obj)
+
+class modeSrc(enum.IntEnum):
+    direct_comm = 0
+    from_schedule = 1
+    no_src = 2
+
+    @classmethod
+    def from_param(cls, obj):
+        return int(obj)
+
+class gridState(enum.IntEnum):
+    on =0,
+    off =1
+
+    @classmethod
+    def from_param(cls, obj):
+        return int(obj)
+
+class commType(enum.IntEnum):
+    modbus_tcp = 0
+    modbus_rtu = 1
+    can = 2
+    api = 3
+    ccs2 = 4
+    gpio = 5
+    none = 6
+
+    @classmethod
+    def from_param(cls, obj):
+        return int(obj)
+
+class factorType(enum.IntEnum):
+    mf_value = 0
+    mf_address = 1
+    sf_value = 2
+    sf_address = 3
+
+    @classmethod
+    def from_param(cls, obj):
+        return int(obj)
+
+class systemOperatingModes(enum.IntEnum):
+    const_power = 0
+    pv_charge_only_mode = 1
+    full_backup = 2
+    max_export = 3
+    max_import = 4
+    full_backup_with_zn = 5
+    gen_limit = 6
+    dr_command = 7
+    daily_peak_th_base = 8
+    daily_peak_time_base = 9
+    export_limit = 10,
+    dg_pv_sync = 11,
+    schedule = 10
+    time_of_use = 11
+    backup = 12
+    none = 13
+
+    @classmethod
+    def from_param(cls, obj):
+        return int(obj)
+
+deviceType_l2e = {
+    "solar-inverter": deviceType.solar,
+    "inverter" : deviceType.solar,
+    "battery": deviceType.battery,
+    "meter": deviceType.meter,
+    "EV": deviceType.EV,
+    "DG" : deviceType.DG,
+    "grid" : deviceType.grid,
+    "IO":deviceType.IO,
+    "load" : deviceType.load
+}
+
+commType_l2e = {
+    "modbus-tcp": commType.modbus_tcp,
+    "modbus-rtu": commType.modbus_rtu,
+    "CAN": commType.can,
+    "API": commType.api,
+    "CCS2": commType.ccs2,
+    "gpio": commType.gpio
+}
+
+operatingMode_l2e = {
+    "pv_charge_only": systemOperatingModes.pv_charge_only_mode,
+    "net_zero": systemOperatingModes.const_power,
+    "power_backup": systemOperatingModes.full_backup,
+    "max_export": systemOperatingModes.max_export,
+    "gen_limit": systemOperatingModes.gen_limit,
+    "none" : systemOperatingModes.none
+}
+
+deviceType_e2s = {
+    deviceType.solar : "inverter",
+    deviceType.battery : "battery",
+    deviceType.meter : "meter",
+    deviceType.EV : "EV",
+}
+
+def scaleData(data, scale_factor):
+    x = 0
+    if type(data) == list:
+        for i in range(len(data)):
+            x = x + (data[len(data) - i - 1] << i * 16)
+    else:
+        x = data
+    return x * scale_factor
+
+class dataModel:
+    valueFromReg: None
+    value: float
+    batch_start_addr: int
+    data: None
+    size: int = 0
+    decoderFunc: None = None
+    encoderFunc: None = None
+    factorDecoderFunc: None = None
+    factor_type: factorType
+    factor_value: float
+    addition_factor: float = 0
+    has_en:bool=False
+    en_block :int=0
+    en_offset :int = 0
+    data_error: bool = False
+    prev_correct_value: float = 0
+    block_num: int = 0
+    offset: int = 0
+    factor_block: int=0
+    factor_offset: int=0
+    byteorder: str = "BIG"
+    wordorder: str = "LITTLE"
+    model_present : bool = False
+    en_start_addr:int=0
+    mode_offset :int = 0
+    mode_block : int =0
+    mode_start_addr : int = 0
+    has_mode : bool = False
+
+    def __init__(self, addr: str="", valuefunc=scaleData, scale_factor=1) -> None:
+        self.valueFromReg = valuefunc
+        self.addr = addr
+        self.value = 0
+        self.factor_type = factorType.mf_value
+        self.factor_value = 1
+        self.addition_factor = 0
+        pass
+
+    def getData(self, data) -> None:
+        try:
+            if not self.data or len(self.data) < self.size:
+                return
+            decoded = BinaryPayloadDecoder.fromRegisters(self.data, wordorder=getattr(Endian, self.wordorder), byteorder=getattr(Endian, self.byteorder))
+            if(self.decoderFunc == None):
+                return
+            else:
+                tmp = getattr(decoded, self.decoderFunc)()
+            if self.factor_type == factorType.mf_value:
+                self.value = (tmp * self.factor_value) + self.addition_factor
+            elif self.factor_type == factorType.sf_address:
+                decoded_factor = BinaryPayloadDecoder.fromRegisters(
+                    [data[self.factor_block][self.factor_offset]], wordorder=getattr(Endian, self.wordorder), byteorder=getattr(Endian, self.byteorder)
+                )
+                self.value = (tmp * (10 ** getattr(decoded_factor, self.factorDecoderFunc)())) + self.addition_factor
+            else:
+                self.value = tmp + self.addition_factor
+        except Exception as e:
+            logging.warning(str(e) + str(" block : ") + str(self.block_num) + str(" offset : ") + str(self.offset))
+
+    def decodeFactor(self):
+        self.factor_value = -1
+        pass
+
+    def getFactors(self, data):
+        try:
+            if self.factor_type == factorType.sf_address:
+                decoded_factor = BinaryPayloadDecoder.fromRegisters(
+                    [data[self.factor_block][self.factor_offset]], Endian.BIG
+                )
+                self.factor_value = decoded_factor.decode_16bit_int()
+        except Exception as e:
+            logging.warning(str(e) + str(data))
+
+    def encode(self):
+        data = self.value - self.addition_factor
+        if self.factor_type == factorType.sf_address:
+            decoded = BinaryPayloadBuilder()
+            tmp = int(data / 10**self.factor_value)
+            getattr(decoded, self.decoderFunc)(tmp)
+            payload = decoded.build()
+            return payload
+        elif self.factor_type == factorType.mf_value:
+            print("---- into encode by m_f factor ----")
+            decoded = BinaryPayloadBuilder()
+            tmp = int(data / self.factor_value)
+            print("value after m_f factor",tmp)
+            getattr(decoded, self.decoderFunc)(tmp)
+            payload = decoded.build()
+            return payload
+
+class measuredData:
+    def __init__(self, phase=1):
+        self.phase: int = phase
+        self.validated: bool = False
+        self.rev_correct_en: float = 0
+
+def getTwosComp(data):
+    data = int(data)
+    return data if (data < 0x8000) else data - (1 << 16)
+
+class controlData:
+    power_pct_stpt: dataModel
+    reactive_power_pct_stpt: dataModel
+    power_stpt: dataModel
+    reactive_power_stpt: dataModel
+    device_state: dataModel
+    poweer_lt : dataModel
+    reactive_poweer_lt : dataModel
+    reactive_stpt: dataModel
+
+    def __init__(self) -> None:
+        self.power_pct_stpt = dataModel("power stpt", scaleData, 1)
+        self.device_state = dataModel("device state", scaleData, 1)
+        self.poweer_lt = dataModel("power_limit",scaleData,1)
+        self.reactive_power_pct_stpt = dataModel("reactive_power_stpt", scaleData, 1)
+        self.reactive_poweer_lt = dataModel("reactive_power_limit",scaleData,1)
+        self.reactive_stpt = dataModel("reactive_stpt", scaleData, 1)
+        pass
+
+class systemDevice:
+    device_type: deviceType
+    measured_data: measuredData
+    control_data: controlData
+    comm_type: commType
+    comm_details = None
+    rated_power = 3800
+    storage_capacity = 0
+    stptCurve = None
+    device_id: int
+    addr_map: dict = {}
+    a:dict = {}
+    err_registers: err.errRegistor
+    ctrl_registers : ctrl_der.controlRegistor
+    num_phases :int=1
+    phase :str="A"
+    connected_to : str = ""
+    minimum_limit : int = 0
+
+    def __init__(self, devicetype, commtype, cfg,rated_power=3800,storage_capacity=0) -> None:
+        self.device_type = devicetype
+        self.comm_type = commtype
+        self.rated_power = rated_power
+        self.storage_capacity = storage_capacity
+        if devicetype == deviceType.solar:
+            self.stptCurve = PVCurveFunc
+            system_operating_details.agg_pv_rated += rated_power
+        elif devicetype == deviceType.battery:
+            self.stptCurve = batteryCurveFunc
+            system_operating_details.agg_batt_rated += rated_power
+            system_operating_details.battery_storage_capacity += storage_capacity
+        self.measured_data = measuredData()
+        self.control_data = controlData()
+
+    def createMapForVar(self, var: dataModel, batch, i, var_name):
+        var.model_present = True
+        x = self.addr_map["map"][batch]["data"][var_name]
+        var.byteorder = self.addr_map["map"][batch]["byteorder"]
+        var.wordorder = self.addr_map["map"][batch]["wordorder"]
+        var.block_num = i
+        var.offset = x["offset"]
+        var.size = x["size"]
+        var.batch_start_addr = self.addr_map["map"][batch]["start_address"]
+        if "s_f" in x and x["s_f"] != "NA":
+            if type(x["s_f"]) == str:
+                var.factor_type = factorType.sf_address
+                j = 0
+                for section in self.addr_map["map"]:
+                    if x["s_f"] in self.addr_map["map"][section]["data"]:
+                        var.factor_block = j
+                        var.factor_offset = self.addr_map["map"][section]["data"][x["s_f"]]["offset"]
+                        var.factorDecoderFunc = self.addr_map["map"][section]["data"][x["s_f"]]["format"]
+                    j = j + 1
+        if "m_f" in x and x["m_f"] != "NA":
+            if type(x["m_f"]) == float or type(x["m_f"]) == int:
+                var.factor_type = factorType.mf_value
+                var.factor_value = x["m_f"]
+        if "a_f" in x and x["a_f"] != "NA":
+            if type(x["a_f"]) == float or type(x["a_f"]) == int:
+                var.addition_factor = x["a_f"]
+        var.decoderFunc = x["format"]
+
+    def createMapForCtrlVar(self, var: dataModel, batch, i, var_name):
+        var.model_present = True
+        x = self.ctrl_map["map"][batch]["data"][var_name]
+        var.byteorder = self.ctrl_map["map"][batch]["byteorder"]
+        var.wordorder = self.ctrl_map["map"][batch]["wordorder"]
+        var.block_num = i
+        var.offset = x["offset"]
+        var.size = x["size"]
+        var.batch_start_addr = self.ctrl_map["map"][batch]["start_address"]
+        if "s_f" in x and x["s_f"] != "NA":
+            if type(x["s_f"]) == str:
+                var.factor_type = factorType.sf_address
+                j = 0
+                for section in self.ctrl_map["map"]:
+                    if x["s_f"] in self.ctrl_map["map"][section]["data"]:
+                        var.factor_block = j
+                        var.factor_offset = self.ctrl_map["map"][section]["data"][x["s_f"]]["offset"]
+                        var.factorDecoderFunc = self.ctrl_map["map"][section]["data"][x["s_f"]]["format"]
+                    j = j + 1
+        if "m_f" in x and x["m_f"] != "NA":
+            if type(x["m_f"]) == float or type(x["m_f"]) == int:
+                var.factor_type = factorType.mf_value
+                var.factor_value = x["m_f"]
+        if("switch_register" in x):
+            if(x["switch_register"] != "NA" and x["switch_register"] != ""):
+                var.en_offset = self.ctrl_map["map"][batch]["data"][x["switch_register"]]["offset"]
+                var.en_block = i
+                var.en_start_addr = self.ctrl_map["map"][batch]["start_address"]
+        if("mode_reg") in x:
+            if(x["mode_reg"] != "" and x["mode_reg"] != "NA"):
+                var.mode_offset = self.ctrl_map["map"][batch]["data"][x["mode_reg"]]["offset"]
+                var.mode_start_addr = self.ctrl_map["map"][batch]["start_address"]
+                var.mode_block = i
+                var.has_mode = True
+        var.decoderFunc = x["format"]
+
+    def createErrorMap(self, part_num):
+        self.err_registers = err.errRegistor(self.addr_map, part_num)
+
+    def createControlMap(self, part_num):
+        with open('modbus_mappings/control_registers.json') as mapfile:
+            self.ctrl_map['map'] = json.load(mapfile)[part_num]
+    
+    def createMeasureMap(self,part_num):
+        with open('modbus_mappings/mappings.json') as mapfile:
+            self.addr_map['map'] = json.load(mapfile)[part_num]
+
+    def _process_list_parameter(self, param_name, batch, block_num, staged_phase, staged_component):
+        if param_name.startswith('L') and '_' in param_name:
+            try:
+                prefix, type_long = param_name.split('_', 1)
+                if prefix[1:].isdigit():
+                    phase_idx = int(prefix[1:]) - 1
+                    type_short = next((s for s, l in data_decode.items() if l == type_long), None)
+                    if type_short:
+                        if type_short not in staged_phase:
+                            staged_phase[type_short] = {}
+                        if phase_idx not in staged_phase[type_short]:
+                            model = dataModel()
+                            self.createMapForVar(model, batch, block_num, param_name)
+                            staged_phase[type_short][phase_idx] = model
+                        return True
+            except (ValueError, KeyError, StopIteration):
+                pass
+        for base_param in component_data.keys():
+            parts = base_param.split('_')
+            prefix = parts[0]
+            suffix = '_'.join(parts[1:])
+            if param_name.startswith(prefix) and param_name.endswith(suffix) and param_name != base_param:
+                try:
+                    num_str = param_name[len(prefix):-(len(suffix) + 1)]
+                    if num_str.isdigit():
+                        idx = int(num_str) - 1
+                        model = dataModel()
+                        self.createMapForVar(model, batch, block_num, param_name)
+                        staged_component[base_param][idx] = model
+                        return True
+                except (ValueError, IndexError):
+                    continue
+        return False
+
+    def _finalize_staged_lists(self, staged_data, target_attr_map=None):
+        for key, idx_map in staged_data.items():
+            if idx_map:
+                max_idx = max(idx_map.keys())
+                full_list = [None] * (max_idx + 1)
+                for idx, model in idx_map.items():
+                    full_list[idx] = model
+                setattr(self.measured_data, key, full_list)
+
+    def createMeasureRegisterMap(self):
+        i = 0
+        staged_phase_data = {}
+        staged_component_data = {key: {} for key in component_data.keys()}
+        for batch in self.addr_map["map"]:
+            map_data = self.addr_map["map"][batch]["data"]
+            for param_name in map_data:
+                if self._process_list_parameter(param_name, batch, i, staged_phase_data, staged_component_data):
+                    continue
+                if param_name in agg_data or param_name in fault_data or param_name in device_status_data or param_name in di_do_data:
+                    if not hasattr(self.measured_data, param_name):
+                        model = dataModel()
+                        self.createMapForVar(model, batch, i, param_name)
+                        setattr(self.measured_data, param_name, model)
+            i += 1
+        self._finalize_staged_lists(staged_phase_data)
+        self._finalize_staged_lists(staged_component_data)
+
+    def createControlRegisterMap(self):
+        i=0
+        for batch in self.ctrl_map['map']:
+            if('power_limit' in self.ctrl_map["map"][batch]["data"]):
+                self.createMapForCtrlVar(self.control_data.poweer_lt,batch,i,"power_limit")
+            if('power_limit_pct' in self.ctrl_map["map"][batch]["data"]):
+                self.createMapForCtrlVar(self.control_data.power_pct_stpt,batch,i,"power_limit_pct")
+            if('reactive_power_limit' in self.ctrl_map["map"][batch]["data"]):
+                self.createMapForCtrlVar(self.control_data.reactive_poweer_lt,batch,i,"reactive_power_limit")
+            if('reactive_power_limit_pct' in self.ctrl_map["map"][batch]["data"]):
+                self.createMapForCtrlVar(self.control_data.reactive_power_pct_stpt,batch,i,"reactive_power_limit_pct")
+            if('reactive_stpt' in self.ctrl_map["map"][batch]["data"]):
+                self.createMapForCtrlVar(self.control_data.reactive_stpt,batch,i,"reactive_stpt")
+            i+=1
+        pass
+
+    def encodeWrite(self, msg_json:dict):
+        print("----into encodeWrite----")
+        print("msg_json into encodeWrite",msg_json)
+        if msg_json["param"] == "active_power":
+            if(self.control_data.poweer_lt.model_present):
+                self.control_data.poweer_lt.value = eval(msg_json['value'])
+                if(self.control_data.poweer_lt.has_mode):
+                    decoded = BinaryPayloadBuilder()
+                    decoded.add_16bit_uint(1)
+                    payload=decoded.build()
+                    self.writeDataToRegisters( mbus.bytes_to_registers(payload),self.control_data.poweer_lt.mode_start_addr + self.control_data.poweer_lt.mode_offset)
+                decoded = BinaryPayloadBuilder()
+                decoded.add_16bit_uint(True)
+                payload=decoded.build()
+                self.writeDataToRegisters( mbus.bytes_to_registers(payload),self.control_data.poweer_lt.en_start_addr + self.control_data.poweer_lt.en_offset)
+                self.writeDataToRegisters( mbus.bytes_to_registers(self.control_data.poweer_lt.encode()),self.control_data.poweer_lt.batch_start_addr + self.control_data.poweer_lt.offset)
+            elif(self.control_data.power_pct_stpt.model_present):
+                print("----pct_stpt----")
+                self.control_data.power_pct_stpt.value = int(eval(msg_json['value'])*100/self.rated_power)
+                print("pct_stpt is : ",self.control_data.power_pct_stpt.value)
+                self.writeDataToRegisters( mbus.bytes_to_registers(self.control_data.power_pct_stpt.encode()),self.control_data.power_pct_stpt.batch_start_addr + self.control_data.power_pct_stpt.offset)
+                decoded = BinaryPayloadBuilder()
+                decoded.add_16bit_uint(True)
+                payload=decoded.build()
+                self.writeDataToRegisters( mbus.bytes_to_registers(payload),self.control_data.power_pct_stpt.en_start_addr + self.control_data.power_pct_stpt.en_offset)
+        
+        elif msg_json["param"] == "reactive_kvar":
+            print("----into reactive encodeWrite----")
+            print("msg_json into reactive encodeWrite",msg_json)
+            if self.control_data.reactive_stpt.model_present:
+                self.control_data.reactive_stpt.value = int(eval(msg_json['value']))
+                print(f"reactive_stpt value is {self.control_data.reactive_stpt.value}")
+                self.writeDataToRegisters(mbus.bytes_to_registers(self.control_data.reactive_stpt.encode()), self.control_data.reactive_stpt.batch_start_addr + self.control_data.reactive_stpt.offset)
+                decoded = BinaryPayloadBuilder()
+                decoded.add_16bit_uint(0xA2)
+                payload=decoded.build()
+                self.writeDataToRegisters( mbus.bytes_to_registers(payload),self.control_data.reactive_stpt.en_start_addr + self.control_data.reactive_stpt.en_offset)
+
+    def decodeData(self, data_set):
+        data = data_set.get('read', [])
+        control_data = data_set.get('control', [])
+        
+        if not data or data == [[]]:
+            for x in per_phase_data:
+                if hasattr(self.measured_data, x):
+                    for model_instance in getattr(self.measured_data, x):
+                        if model_instance:
+                            model_instance.value = 0
+            for x in agg_data:
+                if hasattr(self.measured_data, x):
+                    model_instance = getattr(self.measured_data, x)
+                    if model_instance:
+                        model_instance.value = 0
+            for x in component_data.keys():
+                if hasattr(self.measured_data, x):
+                    for model_instance in getattr(self.measured_data, x):
+                        if model_instance:
+                            model_instance.value = 0
+            for x in fault_data:
+                if hasattr(self.measured_data, x):
+                    model_instance = getattr(self.measured_data, x)
+                    if model_instance:
+                        model_instance.value = 0
+            for x in device_status_data:
+                if hasattr(self.measured_data, x):
+                    model_instance = getattr(self.measured_data, x)
+                    if model_instance:
+                        model_instance.value = 0
+            for x in di_do_data:
+                if hasattr(self.measured_data, x):
+                    model_instance = getattr(self.measured_data, x)
+                    if model_instance:
+                        model_instance.value = 0
+            return
+
+        for x in per_phase_data:
+            if hasattr(self.measured_data, x):
+                for model_instance in getattr(self.measured_data, x):
+                    if model_instance:
+                        model_instance.data = data[model_instance.block_num][model_instance.offset : model_instance.offset + model_instance.size]
+                        model_instance.getData(data)
+        for x in agg_data:
+            if hasattr(self.measured_data, x):
+                model_instance = getattr(self.measured_data, x)
+                if model_instance:
+                    model_instance.data = data[model_instance.block_num][model_instance.offset : model_instance.offset + model_instance.size]
+                    model_instance.getData(data)
+        for x in component_data.keys():
+            if hasattr(self.measured_data, x):
+                for model_instance in getattr(self.measured_data, x):
+                    if model_instance:
+                        model_instance.data = data[model_instance.block_num][model_instance.offset : model_instance.offset + model_instance.size]
+                        model_instance.getData(data)
+        for x in fault_data:
+            if hasattr(self.measured_data, x):
+                model_instance = getattr(self.measured_data, x)
+                if model_instance:
+                    model_instance.data = data[model_instance.block_num][model_instance.offset : model_instance.offset + model_instance.size]
+                    model_instance.getData(data)
+        for x in device_status_data:
+            if hasattr(self.measured_data, x):
+                model_instance = getattr(self.measured_data, x)
+                if model_instance:
+                    model_instance.data = data[model_instance.block_num][model_instance.offset : model_instance.offset + model_instance.size]
+                    model_instance.getData(data)
+        for x in di_do_data:
+            if hasattr(self.measured_data, x):
+                model_instance = getattr(self.measured_data, x)
+                if model_instance:
+                    model_instance.data = data[model_instance.block_num][model_instance.offset : model_instance.offset + model_instance.size]
+                    if model_instance.data and isinstance(model_instance.data[0], bool):
+                        model_instance.value = int(model_instance.data[0])
+                    else:
+                        model_instance.getData(data)
+        if(self.control_data.poweer_lt.model_present):
+            if control_data and control_data != [[]]:
+                self.control_data.poweer_lt.getFactors(control_data)
+        if(self.control_data.power_pct_stpt.model_present):
+            if control_data and control_data != [[]]:
+                self.control_data.power_pct_stpt.getFactors(control_data)
+
+    def writeToRegisters(self, data, address):
+        if (self.comm_type == commType.modbus_rtu or self.comm_type == commType.modbus_tcp):
+            mbus.writeModbusData(self, address, data)
+
+device_list = []
+
+class operatingDetails:
+    system_operating_mode = None
+    controlFunc = None
+    system_curtail_state = 0
+    full_pv_curtail = 2
+    agg_pv_rated = 0
+    agg_batt_rated = 0
+    battery_storage_capacity = 0
+    aggDG = 0
+    dg_lim = 0
+    ref = 0
+    scs_min = 0
+    scs_max = 1
+    aggPV = 0
+    aggBatt = 0
+    aggGrid = 0
+    aggGrid_Q = 0
+    aggGrid_PF = 0
+    aggLoad = 0
+    aggEV = 0
+    load = 0
+    Ki = 0
+    Kp = 0
+    Ts = 0
+    err = 0
+    storage_stpt = 0
+    pv_stpt = 0
+    safety_control_mode = 0
+    io_output_data = None
+    mode_src : modeSrc = modeSrc.no_src
+    event_start_time : int=0
+    event_end_time : int=0
+    event_date : str=""
+    swtch_curtail_percent = 0
+    battery_energy = 0
+    grid_state = gridState.on
+    storage_min = -100
+    storage_max = 100
+    solar_max = 100
+    limit_export : bool
+    live_data : bool = False
+    live_data_timer : int = 0
+
+    def __init__(self):
+        self.aggDG = 0
+        self.system_operating_mode = None
+        self.grid_state = gridState.on
+        self.limit_export = False
+        self.live_data = False
+        self.live_data_timer = 0
+        self.pv_stpt = 0
+        self.aggGrid_Q = 0
+        self.aggPF = 0
+
+
+    def controlGridPF(self):
+        print("---- into controlGridPF ----")
+        PF_TARGET = 0.95
+        PF_TOL = 0.02
+        TAN_PHI_TARGET = 0.328   # tan(cos^-1(0.95))
+        KP = 0.5                 # tuning gain
+        MAX_STEP = 10
+
+        # Low-pass filter for fast fluctuations
+        alpha = 0.2
+
+        if not hasattr(self, "filtered_P"):
+            self.filtered_P = self.aggGrid
+            self.filtered_Q = self.aggGrid_Q
+
+        self.filtered_P = alpha * self.aggGrid + (1 - alpha) * self.filtered_P
+        self.filtered_Q = alpha * self.aggGrid_Q + (1 - alpha) * self.filtered_Q
+
+        P = self.filtered_P / 1000
+        Q = self.filtered_Q / 1000
+        print(f"aggGrid is {P} KW and aggGrid_Q is {Q} kvar")
+
+        #Low power condition → disable PF control
+        if abs(P) < 1:
+            print(f"aggGrid is less than 0 {P} setting target_q_at_meter as 0")
+            target_q_at_meter = 0
+        
+        #Check if PF already within acceptable range
+        if abs(abs(self.aggGrid_PF) - PF_TARGET) <= PF_TOL:
+            print(f"power_factor at grid is already at Target self.aggGrid_PF is {self.aggGrid_PF} so it will return as it is")
+            return
+
+        # Calculate required reactive power at grid
+        # IMPORTANT: use signed P (self.aggGrid), NOT abs()
+        target_q_at_meter = P * TAN_PHI_TARGET
+        print(f"target reactive power at meter = {P} * {TAN_PHI_TARGET} = {target_q_at_meter}")
+
+        # 🔸 4. Calculate error
+        q_error = target_q_at_meter - Q
+        print(f"q_error = target_q_at_meter {target_q_at_meter} - aggGrid_Q {Q} = {q_error}")
+
+        # 🔸 5. Apply proportional control (to avoid aggressive jumps)
+        q_correction = KP * q_error
+        print(f"q_correction is 0.5 * q_error = {q_correction}")
+
+        # 🔸 6. Distribute to inverters
+        solar_devices = [d for d in device_list if d.device_type == deviceType.solar]
+        num_inv = len(solar_devices) if solar_devices else 1
+        print(f"Total number of inverters {num_inv}")
+
+        q_per_inv = q_correction / num_inv
+        print(f"q_per_inv is {q_per_inv}")
+
+        for device in solar_devices:
+            current_inv_q = 0
+
+            if hasattr(device.measured_data, 'reactive_power') and device.measured_data.reactive_power.model_present:
+                current_inv_q = device.measured_data.reactive_power.value / 1000
+                print(f"current inv reactive power is {current_inv_q}")
+
+            delta_q = max(min(q_per_inv, MAX_STEP), -MAX_STEP)
+            print(f"delta_q is {delta_q}")
+
+            # 🔸 7. Incremental update (smooth control)
+            new_q_stpt = current_inv_q + delta_q
+            print(f"new_q_stpt is {new_q_stpt}")
+
+            # 🔸 8. Clamp as per inverter limit
+            new_q_stpt = max(min(new_q_stpt, 55), -55)
+            print(f"final q_stpt after all calculations is {new_q_stpt}")
+
+            # 🔸 9. Write to inverter
+            device.encodeWrite({"param": "reactive_kvar", "value": str(new_q_stpt)})
+
+    def controlFuncConstPower(self):
+        self.storage_stpt = max(min((
+            (
+                system_operating_details.aggLoad
+                - system_operating_details.aggPV
+                - system_operating_details.ref
+            )
+        ),self.storage_max),self.storage_min)
+        print("in cosnt power",system_operating_details.load,system_operating_details.aggPV,system_operating_details.ref,system_operating_details.storage_max,system_operating_details.storage_min)
+
+    def controlPVChargeOnly(self):
+        self.storage_stpt = (-system_operating_details.aggPV)
+
+    def controlFuncFullBackup(self):
+        if(self.grid_state == gridState.on):
+            self.storage_stpt = -system_operating_details.agg_batt_rated
+
+    def controlFuncFullExport(self):
+        self.storage_stpt = system_operating_details.agg_batt_rated
+
+    def controlFuncGenLimit(self):
+        self.pv_stpt = self.ref
+
+    def controlFuncNone(self):
+        self.storage_stpt = 0
+        self.pv_stpt = system_operating_details.agg_pv_rated
+
+    def time_of_use_func(self):
+        with(open(COST_JSON_PATH))as cost_file:
+            cost_cfg = json.load(cost_file)
+            costs = cost_cfg["cost"]
+        N = len(costs)
+        avg_cost = sum(costs)/N
+        abs_sum = sum([abs(x - avg_cost) for x in costs])
+        print("battery_Storage : ",self.battery_storage_capacity)
+        alpha = self.ref*self.battery_storage_capacity / abs_sum
+        now_time = datetime.datetime.now()
+        now_minutes = now_time.hour*60 + now_time.minute
+        index = int(now_minutes / (24*60/N))
+        print("power :",alpha * (costs[index] - avg_cost),"cost : ",costs[index],"avg : ",avg_cost,"alpha : ",alpha)
+        self.storage_stpt= alpha * (costs[index] - avg_cost)
+
+    def dr_based_batt_func(self):
+        print(time.time())
+        time_diff = system_operating_details.event_end_time - system_operating_details.event_start_time
+        storage_capacity = system_operating_details.battery_storage_capacity
+        if(time.time() > system_operating_details.event_start_time and time.time() < system_operating_details.event_end_time):
+            stpt = min(system_operating_details.battery_storage_capacity  / time_diff,system_operating_details.ref)
+        else:
+            stpt = -system_operating_details.battery_storage_capacity  / (24 - time_diff/3600)
+            pass
+        self.storage_stpt = stpt
+
+    def daily_peak_th_base_func(self):
+        self.storage_stpt = min(system_operating_details.agg_batt_rated,abs(system_operating_details.ref - system_operating_details.aggGrid)) * (2*(system_operating_details.aggGrid > system_operating_details.ref) - 1)
+
+    def export_limit_func(self):
+        grid_power = self.aggLoad - self.aggBatt - self.aggPV
+        self.controlFuncConstPower()
+        if(self.storage_stpt <= -self.agg_batt_rated and self.limit_export):
+            self.pv_stpt = max(min(self.aggLoad - self.ref - self.storage_stpt,self.agg_pv_rated),0)
+            self.pv_stpt = min(self.solar_max,self.pv_stpt)
+        else:
+            self.pv_stpt = system_operating_details.agg_pv_rated    
+
+    def dg_old_pv_sync_func(self):
+        tmp = self.aggLoad - self.dg_lim
+        if(self.agg_batt_rated > 0):
+            self.storage_stpt = max(min(tmp - self.aggPV,self.agg_batt_rated),-self.agg_batt_rated)
+            if(self.storage_stpt <= -self.agg_batt_rated):
+                print("tmp : ",tmp,self.aggLoad)
+                self.pv_stpt = min(tmp - self.storage_stpt,self.agg_pv_rated)
+        else:
+            self.pv_stpt = max(min(self.agg_pv_rated,self.aggDG + self.aggPV - self.dg_lim),0)
+
+    def dg_pv_sync_func(self):
+        if self.grid_state != gridState.off:
+            print("grid is on and the power of grid is ",self.aggGrid)
+            self.pv_stpt = self.agg_pv_rated
+            return
+        
+        margin = 10000
+        ramp_up = 5000
+        ramp_down = 20000
+        deadband = 2000
+
+        if not hasattr(self, "pv_stpt"):
+            self.pv_stpt = 0
+
+        if self.aggDG <= self.dg_lim:
+            self.pv_stpt = 0
+            return
+
+        estimated_load = self.aggDG + self.aggPV
+        print("calculated estimated load dg + pv = ",estimated_load)
+        pv_allowed = estimated_load - self.dg_lim - margin
+        print("pv allowed is estimated load - dg limit = ",pv_allowed)
+        
+        pv_allowed = max(min(pv_allowed, self.agg_pv_rated), 0)
+        print("final pv allowed is ",pv_allowed)
+
+        diff = pv_allowed - self.pv_stpt
+
+        if abs(diff) > deadband:
+            if diff > 0:
+                self.pv_stpt = min(self.pv_stpt + ramp_up, pv_allowed)
+            else:
+                self.pv_stpt = max(self.pv_stpt - ramp_down, pv_allowed)
+
+    def export_lim_export_priority_func(self):
+        self.storage_stpt = min(0,self.aggBatt + min(0,self.ref+self.aggGrid))
+
+    def safety_control_func(self):
+        if self.safety_control_mode == 0:
+            io.ioDevice.write_digital_outputs(0)
+        elif self.safety_control_mode == 1:
+            io.ioDevice.write_digital_outputs(1, self.io_output_data)
+
+def setParameter(data_json):
+    if("mode" in data_json.keys()):
+        updateOperatingMode(data_json['mode'])
+    if "param" in data_json.keys():
+        if(data_json['param'] == "active_power"):
+            print(data_json['value'])
+            for device in device_list:
+                if(device.device_id == eval(data_json['device_id'])):
+                    device.encodeWrite(data_json)
+            pass
+    if "device_state" in data_json.keys():
+        address = device.control_data.device_state.batch_start_addr + device.control_data.device_state.offset
+        data_to_ctrl:dict = {
+            "address": address,
+            "format" : device.control_data.device_state.decoderFunc,
+            "value" : data_json["device_state"],
+            "wo" : device.control_data.device_state.wordorder,
+            "bo":device.control_data.byteorder
+        }
+        device.writeDataToCtrlRegisters(data_to_ctrl)
+
+def updateOperatingMode(mode_str, ref=0):
+    system_operating_details.system_operating_mode = operatingMode_l2e[mode_str]
+    if mode_str == "net_zero":
+        system_operating_details.ref = 0
+        system_operating_details.scs_min = 0
+        system_operating_details.scs_max = 1
+        system_operating_details.controlFunc = (system_operating_details.controlFuncConstPower)
+    if mode_str == "pv_charge_only":
+        system_operating_details.ref = 0
+        system_operating_details.scs_min = 0.5
+        system_operating_details.scs_max = 1
+        system_operating_details.controlFunc = (system_operating_details.controlPVChargeOnly)
+    if mode_str == "max_export":
+        system_operating_details.ref = 0
+        system_operating_details.scs_max = 0
+        system_operating_details.scs_min = 0
+        system_operating_details.controlFunc = (system_operating_details.controlFuncFullExport)
+    if mode_str == "power_backup":
+        system_operating_details.ref = 0
+        system_operating_details.scs_max = 1
+        system_operating_details.scs_min = 1
+        system_operating_details.controlFunc = (system_operating_details.controlFuncFullBackup)
+    if mode_str == "gen_limit":
+        system_operating_details.ref = ref
+        system_operating_details.scs_max = 1
+        system_operating_details.scs_min = 1
+        system_operating_details.controlFunc = (system_operating_details.controlFuncGenLimit)
+    if mode_str == "none":
+        system_operating_details.controlFunc = (system_operating_details.controlFuncNone)
+    if mode_str == "safety_control_mode":
+        system_operating_details.controlFunc = system_operating_details.safety_control_func
+    logging.warning(str(time.time()) + "change mode to: " + mode_str + " ref value : " + str(ref))
+
+def batteryCurveFunc():
+    if system_operating_details.system_curtail_state < 1:
+        return 100 - 200 * system_operating_details.system_curtail_state
+    else:
+        return -100
+
+def PVCurveFunc():
+    if system_operating_details.system_curtail_state < 1:
+        return 100
+    else:
+        return (100 * (system_operating_details.full_pv_curtail - system_operating_details.system_curtail_state) / (system_operating_details.full_pv_curtail - 1))
+
+def SetController(Kp,Ki,Ts):
+    system_operating_details.Kp = Kp
+    system_operating_details.Ki = Ki
+    system_operating_details.Ts = Ts
+
+def getAgg(device_type):
+    print("----into getAgg calculating aggPV and agg_pv_rated----")
+    tmp = 0
+    agg_power = 0
+    agg_capacity = 0
+    i = 0
+    for device in device_list:
+        if device.device_type == device_type:
+            if hasattr(device.measured_data, 'total_power'):
+                tmp += device.measured_data.total_power.value
+            agg_power += device.rated_power
+            if device.device_type == deviceType.battery:
+                agg_capacity += device.storage_capacity
+    print("aggPV and agg_pv_rated are : ", tmp, agg_power)
+    if device_type == deviceType.battery:
+        return tmp, agg_power, agg_capacity
+    else:
+        return tmp, agg_power
+
+def curtailStateToStpt():
+    for device in device_list:
+        if device.stptCurve != None:
+            device.control_data.setpt = device.stptCurve()
+            data = {"AC Active_powerSetPct": device.control_data.setpt}
+            device.writeDataToRegisters(data)
+
+def setModeSrc(src : str):
+    if(src == "schedule"):
+        system_operating_details.mode_src  = modeSrc.from_schedule
+    elif(src == "direct"):
+        system_operating_details.mode_src = modeSrc.direct_comm
+
+def processMQTTMessage(message : str):
+    print("")
+    print("==================")
+    print("")
+    with(open(CONTROL_JSON_PATH,'w') as control_file):
+        control_file.write(message)
+    print("====================")
+    print("")
+
+def startLiveData():
+    system_operating_details.live_data = True
+    system_operating_details.live_data_timer = 60
+    print("live data started")
+
+def stopLiveData():
+    system_operating_details.live_data = False
+    system_operating_details.live_data_timer = 0
+    print("live data stopped")
+
+def getActiveControlMode():
+    print("----into getActiveControlMode----")
+    if(system_operating_details.aggDG > 0):
+        print("aggDG power : ",system_operating_details.aggDG)
+        system_operating_details.system_operating_mode = systemOperatingModes.dg_pv_sync
+        system_operating_details.controlFunc = system_operating_details.dg_pv_sync_func
+        system_operating_details.ref = system_operating_details.dg_lim
+    else:
+        print("agg_dg somehow got : ",system_operating_details.aggDG)
+        try:
+            with(open(CONTROL_JSON_PATH) as control_file):
+                control_json = json.load(control_file)
+                if("mode" in control_json):
+                    system_operating_details.system_operating_mode = getattr(systemOperatingModes,control_json["mode"])
+                    system_operating_details.controlFunc = getattr(system_operating_details,control_json["mode"] + "_func")
+                    if "ref" in control_json["op_details"]:
+                        system_operating_details.ref = control_json["op_details"]["ref"]
+                    else:
+                        system_operating_details.ref = 0  
+                    if "Limit_export" in control_json["op_details"]:
+                        system_operating_details.limit_export = control_json["op_details"]["Limit_export"]
+                    else:
+                        system_operating_details.limit_export = False
+                    system_operating_details.storage_min = -system_operating_details.agg_batt_rated
+                    if "batt_to_load" in  control_json["op_details"]:
+                        system_operating_details.storage_max = control_json["op_details"]["batt_to_load"] * system_operating_details.agg_batt_rated
+                    else:
+                        system_operating_details.storage_max = 0
+                    if "storage_min" in control_json["op_details"]:
+                        system_operating_details.storage_min = control_json["op_details"]["storage_min"] * system_operating_details.agg_batt_rated / 100
+                    else:
+                         system_operating_details.storage_min = -system_operating_details.agg_batt_rated
+                    if "storage_max" in control_json["op_details"]:
+                        system_operating_details.storage_max = control_json["op_details"]["storage_max"] * system_operating_details.agg_batt_rated / 100
+                    else:
+                        system_operating_details.storage_max = system_operating_details.agg_batt_rated
+                    if "solar_max" in control_json["op_details"]:
+                        system_operating_details.solar_max = control_json["op_details"]["solar_max"] * system_operating_details.agg_pv_rated / 100
+                    else:
+                        system_operating_details.solar_max  = system_operating_details.agg_pv_rated  
+                else:
+                    system_operating_details.controlFunc = None
+                    print("mode from json : ",system_operating_details.controlFunc)
+        except (json.JSONDecodeError, FileNotFoundError):
+            system_operating_details.controlFunc = None
+            print("Control JSON not found or invalid.")
+    print("func is",system_operating_details.controlFunc)
+
+def getAllData():
+    data = {}
+    try:
+        with open(ENERGY_LOG_PATH, 'r') as f:
+            energy_log = json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        energy_log = {}
+    for device in device_list:
+        device_id_str = str(device.device_id)
+        data[device_id_str] = {}
+        if device.device_type in deviceType_e2s:
+            data[device_id_str]["type"] = str(device.num_phases) + "ph_" + deviceType_e2s[device.device_type]
+        for param in per_phase_data:
+            if hasattr(device.measured_data, param):
+                i = 0
+                for x in getattr(device.measured_data, param):
+                    if x is not None:
+                        data[device_id_str]["L" + str(i + 1) + "_" + data_decode[param]] = x.value
+                    i += 1
+        for param in agg_data:
+            if hasattr(device.measured_data, param):
+                model = getattr(device.measured_data, param)
+                if model is not None:
+                    if param == 'total_power':
+                        value = model.value
+                        if 'HT' in device_id_str and value < 0:
+                            value *= -1
+                        data[device_id_str][param] = value
+                    elif param == 'total_energy':
+                        current_energy = model.value
+                        logged_energy = energy_log.get(device_id_str, 0)
+                        final_energy = logged_energy
+                        if current_energy >= logged_energy and (logged_energy == 0 or (current_energy - logged_energy) <= 1000):
+                            final_energy = current_energy
+                            energy_log[device_id_str] = final_energy
+                        if final_energy > 0:
+                            data[device_id_str][param] = final_energy
+                    else:
+                        data[device_id_str][param] = model.value
+        for base_param in component_data.keys():
+            if hasattr(device.measured_data, base_param):
+                models = getattr(device.measured_data, base_param)
+                parts = base_param.split('_', 1)
+                category = parts[0]
+                measurement_type = parts[1]
+                if category not in data[device_id_str]:
+                    data[device_id_str][category] = {}
+                idx = 1
+                for model in models:
+                    if model is not None and model.model_present:
+                        output_name = f"{category}{idx}_{measurement_type}"
+                        val = round(model.value, 2)
+                        if (base_param == 'string_current' or base_param == 'mppt_current') and val > 30:
+                            val = 0.0
+                        if (base_param == 'mppt_voltage') and val > 2000:
+                            val = 0.0
+                        data[device_id_str][category][output_name] = val
+                    idx += 1
+    with open(ENERGY_LOG_PATH, 'w') as f:
+        json.dump(energy_log, f)
+    return data
+
+def getLivePower():
+    live_power_data = {}
+    for device in device_list:
+        if hasattr(device.measured_data, 'total_power'):
+            model = getattr(device.measured_data, 'total_power')
+            if model is not None and model.model_present:
+                device_id_str = str(device.device_id)
+                live_power_data[device_id_str] = model.value
+    return live_power_data
+
+def getFaultData():
+    fault_output = {}
+    for device in device_list:
+        device_faults = {}
+        for param in fault_data:
+            if hasattr(device.measured_data, param):
+                model = getattr(device.measured_data, param)
+                if model is not None and model.model_present:
+                    device_faults[param] = model.value
+        if device_faults:
+            fault_output[str(device.device_id)] = device_faults
+    return fault_output
+
+def getDeviceStatusData():
+    status_output = {}
+    for device in device_list:
+        device_status = {}
+        for param in device_status_data:
+            if hasattr(device.measured_data, param):
+                model = getattr(device.measured_data, param)
+                if model is not None and model.model_present:
+                    device_status[param] = model.value
+        if device_status:
+            status_output[str(device.device_id)] = device_status
+            print("status is ",status_output[str(device.device_id)])
+    return status_output
+
+def getDIDOData():
+    dido_output = {}
+    for device in device_list:
+        device_dido = {}
+        for param in di_do_data:
+            if hasattr(device.measured_data, param):
+                model = getattr(device.measured_data, param)
+                if model is not None and model.model_present:
+                    device_dido[param] = model.value
+        if device_dido:
+            dido_output[str(device.device_id)] = device_dido
+    return dido_output
+
+def getAggDG():
+    print("----into gerAggDG----")
+    system_operating_details.aggDG = 0
+    for device in device_list:
+        if(device.device_type == deviceType.meter and device.connected_to == deviceType.DG):
+             if hasattr(device.measured_data, 'total_power'):
+                system_operating_details.aggDG += device.measured_data.total_power.value
+
+    print("agg dg : ",system_operating_details.aggDG)
+
+def getAggDGlim():
+    print("----into getAggDGlim----")
+    system_operating_details.dg_lim = 0
+    for device in device_list:
+        if(device.device_type == deviceType.meter and device.connected_to == deviceType.DG):
+            if hasattr(device.measured_data, 'total_power'):
+                if device.measured_data.total_power.value > 0:
+                    print(device.measured_data.total_power.value,device)
+                    system_operating_details.dg_lim += device.minimum_limit
+    
+    print("agg dg limit : ",system_operating_details.dg_lim)
+
+def getAggGrid():
+    print("----into getAggGrid----")
+    system_operating_details.aggGrid = 0
+    system_operating_details.aggGrid_Q = 0
+    system_operating_details.aggGrid_PF = 0
+    for device in device_list:
+        if(device.device_type == deviceType.meter and device.connected_to == deviceType.grid):
+            if hasattr(device.measured_data, 'total_power') and device.measured_data.total_power.model_present:
+                system_operating_details.aggGrid += device.measured_data.total_power.value
+            if hasattr(device.measured_data, 'reactive_power') and device.measured_data.reactive_power.model_present:
+                system_operating_details.aggGrid_Q += device.measured_data.reactive_power.value
+            if hasattr(device.measured_data, 'power_factor') and device.measured_data.power_factor.model_present:
+                system_operating_details.aggGrid_PF += device.measured_data.power_factor.value
+
+    print("agg grid : ",system_operating_details.aggGrid)
+    print("agg grid Q : ",system_operating_details.aggGrid_Q)
+    print("agg grid PF : ",system_operating_details.aggGrid_PF)
+
+def getAggLoad():
+    print("----into getAggLoad----")
+    system_operating_details.aggLoad = 0
+    for device in device_list:
+        if(device.device_type == deviceType.meter and device.connected_to == deviceType.load):
+            if hasattr(device.measured_data, 'total_power'):
+                system_operating_details.aggLoad += device.measured_data.total_power.value
+
+    print("agg load : ",system_operating_details.aggLoad)
+
+def runSysControlLoop():
+    print("----into runSysControlLoop----")
+    system_operating_details.aggPV,system_operating_details.agg_pv_rated = getAgg(deviceType.solar)
+    system_operating_details.aggBatt,system_operating_details.agg_batt_rated, system_operating_details.battery_storage_capacity = getAgg(deviceType.battery)
+    system_operating_details.aggEV, aggEV = getAgg(deviceType.EV)
+    getAggLoad()
+    getAggDGlim()
+    getAggDG()
+    getAggGrid()
+    
+    if abs(system_operating_details.aggDG) < 0.1:
+        print("aggDG is 0, controlling reactive power")
+        system_operating_details.controlGridPF()
+    
+    if system_operating_details.aggGrid > 0:
+        print("grid state is on and aggGrid power : ", system_operating_details.aggGrid)
+        system_operating_details.grid_state = gridState.on
+    else:
+        system_operating_details.grid_state = gridState.off
+    getActiveControlMode()
+    if system_operating_details.controlFunc != None:
+        system_operating_details.controlFunc()
+        for device in device_list:
+            if device.device_type == deviceType.battery:
+                print("====battery device =====")
+                power = system_operating_details.storage_stpt
+                data_msg = {"param" : "active_power","value":str(power)}
+                print(data_msg,system_operating_details.storage_stpt)
+                device.encodeWrite(data_msg)
+            if device.device_type == deviceType.solar:
+                
+                if system_operating_details.agg_pv_rated > 0:
+                    print("proportional power is : ")
+                    proportional_power = system_operating_details.pv_stpt * (device.rated_power / system_operating_details.agg_pv_rated)
+                else:
+                    proportional_power = 0
+                print("proportional_power of inv : ", proportional_power)
+                device.control_data.power_pct_stpt.value = proportional_power
+                data_msg = {"param" : "active_power","value":str(proportional_power)}
+                print("data_msg going to encodeWrite : ",data_msg)
+                device.encodeWrite(data_msg)
+
+def getDeviceType(device_id):
+    for device in device_list:
+        if(device.device_id == device_id):
+            return
+    pass
+
+system_operating_details = operatingDetails()

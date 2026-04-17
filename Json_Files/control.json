@@ -1,4 +1,76 @@
 {
+    "is_manual": "True",
+    "mode" : "peak_shaving",
+    "op_details" : {
+        "ref" : 20000,
+        "soc_max" : 100,
+        "soc_min" : 10
+    }
+
+},
+{
+    "mode" : "time_of_use",
+    "op_details" : {
+        "ref" : 0,
+        "soc_max" : 100,
+        "soc_min" : 10,
+        "allow_grid_charging" : "True",
+        "allow_battery_to_grid" : "False",
+        "cost" : [0.087,0.087,0.087,0.087,0.087,0.087,0.087,0.087,0.087,0.087,0.087,0.087,0.087,0.087,0.087,0.087,0.122,0.122,0.122,0.122,0.122,0.122,0.122,0.122,0.122,0.122,0.122,0.122,0.122,0.122,0.122,0.122,0.087,0.087,0.087,0.087,0.087,0.087,0.087,0.087,0.087,0.087,0.087,0.182,0.182,0.182,0.182,0.182,0.182,0.182,0.182,0.182,0.182,0.182,0.182,0.182,0.182,0.182,0.182,0.182,0.182,0.182,0.182,0.182,0.182,0.182,0.182,0.182,0.182,0.087,0.087,0.087,0.087,0.087,0.087,0.087,0.087,0.087,0.087,0.087,0.087,0.087,0.087,0.087,0.087,0.087,0.087,0.087,0.087,0.087,0.087,0.087,0.087,0.087,0.087,0.087],
+    },
+
+},
+{
+    "mode" : "constant_power",
+    "op_details" : {
+        "ref" : <int>,
+        "soc_max" : <int>,
+        "soc_min" : <int>,
+        "charge_rate_max" : <int>,
+        "discharge_rate_max" : <int>,
+        "allow_grid_charging" : <bool>,
+        "allow_battery_to_grid" : <bool>,
+        "rates" : [<list of 24 numbers , each representing hourly rate>],
+        "schedule"  : [
+            {
+                "start_time" : <int>,
+                "end_time" : <int>,
+                "setpoint" : <battery charge/ discharge spercentage>
+            },{
+                "start_time" : <int>,
+                "end_time" : <int>,
+                "setpoint" : <battery charge/ discharge spercentage>
+            }
+        ]
+    },
+
+},
+{
+    "mode" : <mode_name>,
+    "op_details" : {
+        "ref" : <int>,
+        "soc_max" : <int>,
+        "soc_min" : <int>,
+        "charge_rate_max" : <int>,
+        "discharge_rate_max" : <int>,
+        "allow_grid_charging" : <bool>,
+        "allow_battery_to_grid" : <bool>,
+        "rates" : [<list of 24 numbers , each representing hourly rate>],
+        "schedule"  : [
+            {
+                "start_time" : <int>,
+                "end_time" : <int>,
+                "setpoint" : <battery charge/ discharge spercentage>
+            },{
+                "start_time" : <int>,
+                "end_time" : <int>,
+                "setpoint" : <battery charge/ discharge spercentage>
+            }
+        ]
+    },
+
+},
+{
     "mode" : <mode_name>,
     "op_details" : {
         "ref" : <int>,
