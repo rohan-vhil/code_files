@@ -1,11 +1,3 @@
-'''Control Base Code Update
-https://gemini.google.com/share/5d09a41daae0
-
-I updated the nested loop inside getAllData() that processes component_data.
-Instead of directly appending the raw rounded value to the final dictionary, I temporarily stored it in a variable named val. I then added an if statement to check if the parameter currently being processed is either 'string_current' or 'mppt_current'. If it is, and the value is greater than 100, the code overrides val to 0.0 before adding it to your data payload.
-'''
-
-
 import enum
 import math
 import logging
@@ -36,7 +28,7 @@ mqtt_ip: str = "test.mosquitto.org"
 controller_id: str
 per_phase_data =['V','I','P','Q','S','En','VTHD','ITHD']
 
-agg_data = ['power_factor','total_power','total_energy','today_energy','total_voltage','acfreq','temperature','apparent_power','reactive_power','input_power',"SoC","SoH",'current','import_energy','export_energy','irradiance','ambient_temperature','internal_ambient_temperature','module_temperature','internal_module_temperature','wind_direction','wind_speed','humidity','solar_radition','rain_gauge','global_horizontal_irradiance','global_tilt_irradiance','maximum_charging_power','maximum_discharging_power','maximum_cell_voltage','cell_number_with_maximum_voltage','minimum_cell_voltage','cell_number_with_minimum_voltage']
+agg_data = ['power_factor','total_power','total_energy','today_energy','total_voltage','acfreq','temperature','apparent_power','reactive_power','input_power',"SoC","SoH",'current','import_energy','export_energy','charged_energy','discharged_energy','irradiance','ambient_temperature','internal_ambient_temperature','module_temperature','internal_module_temperature','wind_direction','wind_speed','humidity','solar_radition','rain_gauge','global_horizontal_irradiance','global_tilt_irradiance','maximum_charging_power','maximum_discharging_power','maximum_charging_current','minimum_charging_current','available_charging_capacity','available_discharging_capacity','maximum_cell_voltage','cell_number_with_maximum_voltage','minimum_cell_voltage','cell_number_with_minimum_voltage','maximum_cell_temperature','cell_number_with_maximum_temperature','minimum_cell_temperature','cell_number_with_minimum_temperature']
 data_decode = {
     "V" : "voltage",
     "I" : "current",
@@ -689,11 +681,11 @@ class operatingDetails:
     
         PF_TARGET = 0.95
         PF_TOL = 0.02
-        TAN_PHI_TARGET = 0.328   # tan(cos^-1(0.95))
-        KP = 0.5                 # tuning gain
+        TAN_PHI_TARGET = 0.328   
+        KP = 0.5                 
         MAX_STEP = 10
 
-        # Low-pass filter for fast fluctuations
+        
         alpha = 0.2
 
         if not hasattr(self, "filtered_P"):
@@ -707,38 +699,31 @@ class operatingDetails:
         Q = self.filtered_Q / 1000
         print(f"aggGrid is {P} KW and aggGrid_Q is {Q} kvar")
 
-        if P >= 0:
-            pf_target_signed = PF_TARGET     # import
-        else:
-            pf_target_signed = -PF_TARGET 
-
-        print(f"PF target based on direction is {pf_target_signed}")
-
-        #Low power condition → disable PF control
+        
         if abs(P) < 1:
             print(f"aggGrid is less than 0 {P} setting target_q_at_meter as 0")
             target_q_at_meter = 0
         
-        #Check if PF already within acceptable range
-        if abs(abs(self.aggGrid_PF) - pf_target_signed) <= PF_TOL:
+        
+        if abs(abs(self.aggGrid_PF) - PF_TARGET) <= PF_TOL:
             print(f"power_factor at grid is already at Target self.aggGrid_PF is {self.aggGrid_PF} so it will return as it is")
             return
 
-        # Calculate required reactive power at grid
-        # IMPORTANT: use signed P (self.aggGrid), NOT abs()
+        
+        
         target_q_at_meter = P * TAN_PHI_TARGET
         print(f"target reactive power at meter = {P} * {TAN_PHI_TARGET} = {target_q_at_meter}")
 
-        # 🔸 4. Calculate error
+        
         q_error = target_q_at_meter - Q
         print(f"q_error = target_q_at_meter {target_q_at_meter} - aggGrid_Q {Q} = {q_error}")
 
-        # 🔸 5. Apply proportional control (to avoid aggressive jumps)
+        
         q_correction = KP * q_error
         print(f"q_correction is 0.5 * q_error = {q_correction}")
 
-        # 🔸 6. Distribute to inverters
-        solar_devices = [d for d in device_list if d.device_type == deviceType.solar] 
+        
+        solar_devices = [d for d in device_list if d.device_type == deviceType.solar]
         num_inv = len(solar_devices) if solar_devices else 1
         print(f"Total number of inverters {num_inv}")
 
@@ -755,11 +740,11 @@ class operatingDetails:
             delta_q = max(min(q_per_inv, MAX_STEP), -MAX_STEP)
             print(f"delta_q is {delta_q}")
 
-            # 🔸 7. Incremental update (smooth control)
+            
             new_q_stpt = current_inv_q + delta_q
             print(f"new_q_stpt is {new_q_stpt}")
 
-            # 🔸 8. Clamp as per inverter limit
+            
             new_q_stpt = max(min(new_q_stpt, 55), -55)
             
 
@@ -768,7 +753,7 @@ class operatingDetails:
                 print("Setting reactive power 0")
 
             print(f"final q_stpt after all calculations is {new_q_stpt}")
-            # 🔸 9. Write to inverter
+            
             device.encodeWrite({"param": "reactive_kvar", "value": str(new_q_stpt)})
 
     def controlFuncConstPower(self):
@@ -847,6 +832,10 @@ class operatingDetails:
             self.pv_stpt = max(min(self.agg_pv_rated,self.aggDG + self.aggPV - self.dg_lim),0)
 
     def dg_pv_sync_func(self):
+        if self.grid_state != gridState.off:
+            print("grid is on and the power of grid is ",self.aggGrid)
+            self.pv_stpt = self.agg_pv_rated
+            return
         
         margin = 10000
         ramp_up = 5000
@@ -856,11 +845,6 @@ class operatingDetails:
         if not hasattr(self, "pv_stpt"):
             self.pv_stpt = 0
 
-        if self.aggDG == 0 and self.grid_state == gridState.on and self.aggGrid > 0:
-            print(f"System is running on Grid and power of Grid is {self.aggGrid}.The DG is not running and power of DG is {self.aggDG} setting pv_stpt = 100")
-            self.pv_stpt = system_operating_details.agg_pv_rated
-            return
-        
         if self.aggDG <= self.dg_lim:
             self.pv_stpt = 0
             return
@@ -1087,6 +1071,11 @@ def getAllData():
                         value = model.value
                         if 'HT' in device_id_str and value < 0:
                             value *= -1
+                        if getattr(device, 'rated_power', 0) > 0 and value > device.rated_power:
+                            print("total_power value exceeded taking previous value")
+                            value = model.prev_correct_value
+                        else:
+                            model.prev_correct_value = value
                         data[device_id_str][param] = value
                     elif param == 'total_energy':
                         current_energy = model.value
@@ -1232,8 +1221,9 @@ def runSysControlLoop():
     getAggDG()
     getAggGrid()
     
-
-    system_operating_details.controlGridPF()
+    if abs(system_operating_details.aggDG) < 0.1:
+        print("aggDG is 0, controlling reactive power")
+        system_operating_details.controlGridPF()
     
     if system_operating_details.aggGrid > 0:
         print("grid state is on and aggGrid power : ", system_operating_details.aggGrid)

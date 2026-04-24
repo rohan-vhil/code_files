@@ -28,7 +28,9 @@ import time
 import random
 import enum
 import logging
+import os
 from typing import Union
+import path_config
 
 import RPi.GPIO as GPIO
 
@@ -41,12 +43,14 @@ import digitalio
 from adafruit_mcp230xx.mcp23017 import MCP23017
 
 base_path = "../"
+path_config.path_cfg = path_config.pathConfig()
+CONTROL_JSON_PATH = os.path.join(path_config.path_cfg.base_path, 'control', 'control.json')
 
 GPIO.setmode(GPIO.BCM)
 
 class ioDevice:
     def __init__(self):
-        self.installer_cfg = self.load_json(base_path + 'installer_cfg/installer_cfg.json')
+        self.installer_cfg = self.load_json(base_path + '../submodules/RpiBackend/app/json_files/installer_cfg.json')
         self.io_mappings = self.load_json(base_path + 'io_mappings/io_mappings.json')
 
         self.i2c = busio.I2C(board.SCL, board.SDA)
