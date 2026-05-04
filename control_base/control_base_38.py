@@ -1,11 +1,3 @@
-'''DG-PV Control Base Code Update and Debug
-Control Base Code Update Request
-
-https://gemini.google.com/share/d5e8790c0a16
-
-https://gemini.google.com/share/d94dcd74e4ab'''
-
-
 import enum
 import math
 import logging
@@ -28,7 +20,6 @@ import os
 default_Ts = 3
 default_Ki = 0.0001
 default_Kp = 0.00001
-
 
 vpp_id: int = 0
 site_id: int = 0
@@ -513,7 +504,7 @@ class systemDevice:
                 self.writeDataToRegisters( mbus.bytes_to_registers(self.control_data.poweer_lt.encode()),self.control_data.poweer_lt.batch_start_addr + self.control_data.poweer_lt.offset)
             elif(self.control_data.power_pct_stpt.model_present):
                 print("----pct_stpt----")
-                self.control_data.power_pct_stpt.value = int(eval(msg_json['value'])*100/self.rated_power)
+                self.control_data.power_pct_stpt.value = round(eval(msg_json['value'])*100/self.rated_power)
                 print("pct_stpt is : ",self.control_data.power_pct_stpt.value)
                 self.writeDataToRegisters( mbus.bytes_to_registers(self.control_data.power_pct_stpt.encode()),self.control_data.power_pct_stpt.batch_start_addr + self.control_data.power_pct_stpt.offset)
                 decoded = BinaryPayloadBuilder()
@@ -658,24 +649,27 @@ class operatingDetails:
     swtch_curtail_percent = 0
     battery_energy = 0
     grid_state = gridState.on
+    prev_grid_state = gridState.on
     storage_min = -100
     storage_max = 100
     solar_max = 100
     limit_export : bool
     live_data : bool = False
     live_data_timer : int = 0
+    grid_return_time : float = 0
 
     def __init__(self):
         self.aggDG = 0
         self.system_operating_mode = None
         self.grid_state = gridState.on
+        self.prev_grid_state = gridState.on
         self.limit_export = False
         self.live_data = False
         self.live_data_timer = 0
         self.pv_stpt = 0
         self.aggGrid_Q = 0
         self.aggPF = 0
-
+        self.grid_return_time = 0
 
     def controlGridPF(self):
         print("---- into controlGridPF ----")
@@ -686,14 +680,11 @@ class operatingDetails:
             print("DG is off")
             is_dg_on = False
 
-    
         PF_TARGET = 0.95
         PF_TOL = 0.02
-        TAN_PHI_TARGET = 0.328   # tan(cos^-1(0.95))
-        KP = 0.5                 # tuning gain
+        TAN_PHI_TARGET = 0.328
+        KP = 0.5
         MAX_STEP = 10
-
-        # Low-pass filter for fast fluctuations
         alpha = 0.2
 
         if not hasattr(self, "filtered_P"):
@@ -707,31 +698,31 @@ class operatingDetails:
         Q = self.filtered_Q / 1000
         print(f"aggGrid is {P} KW and aggGrid_Q is {Q} kvar")
 
-        #Low power condition → disable PF control
+        if P >= 0:
+            pf_target_signed = PF_TARGET
+        else:
+            pf_target_signed = -PF_TARGET 
+
+        print(f"PF target based on direction is {pf_target_signed}")
+
         if abs(P) < 1:
             print(f"aggGrid is less than 0 {P} setting target_q_at_meter as 0")
             target_q_at_meter = 0
         
-        #Check if PF already within acceptable range
-        if abs(abs(self.aggGrid_PF) - PF_TARGET) <= PF_TOL:
+        if abs(abs(self.aggGrid_PF) - pf_target_signed) <= PF_TOL:
             print(f"power_factor at grid is already at Target self.aggGrid_PF is {self.aggGrid_PF} so it will return as it is")
             return
 
-        # Calculate required reactive power at grid
-        # IMPORTANT: use signed P (self.aggGrid), NOT abs()
         target_q_at_meter = P * TAN_PHI_TARGET
         print(f"target reactive power at meter = {P} * {TAN_PHI_TARGET} = {target_q_at_meter}")
 
-        # 🔸 4. Calculate error
         q_error = target_q_at_meter - Q
         print(f"q_error = target_q_at_meter {target_q_at_meter} - aggGrid_Q {Q} = {q_error}")
 
-        # 🔸 5. Apply proportional control (to avoid aggressive jumps)
         q_correction = KP * q_error
         print(f"q_correction is 0.5 * q_error = {q_correction}")
 
-        # 🔸 6. Distribute to inverters
-        solar_devices = [d for d in device_list if d.device_type == deviceType.solar]
+        solar_devices = [d for d in device_list if d.device_type == deviceType.solar] 
         num_inv = len(solar_devices) if solar_devices else 1
         print(f"Total number of inverters {num_inv}")
 
@@ -748,20 +739,16 @@ class operatingDetails:
             delta_q = max(min(q_per_inv, MAX_STEP), -MAX_STEP)
             print(f"delta_q is {delta_q}")
 
-            # 🔸 7. Incremental update (smooth control)
             new_q_stpt = current_inv_q + delta_q
             print(f"new_q_stpt is {new_q_stpt}")
 
-            # 🔸 8. Clamp as per inverter limit
             new_q_stpt = max(min(new_q_stpt, 55), -55)
             
-
             if is_dg_on:
                 new_q_stpt = 0
                 print("Setting reactive power 0")
 
             print(f"final q_stpt after all calculations is {new_q_stpt}")
-            # 🔸 9. Write to inverter
             device.encodeWrite({"param": "reactive_kvar", "value": str(new_q_stpt)})
 
     def controlFuncConstPower(self):
@@ -840,48 +827,71 @@ class operatingDetails:
             self.pv_stpt = max(min(self.agg_pv_rated,self.aggDG + self.aggPV - self.dg_lim),0)
 
     def dg_pv_sync_func(self):
-        timer = 0
-        if self.grid_state != gridState.off and self.aggDG == 0:
-            print("grid is on and the power of grid is ",self.aggGrid)
-            self.pv_stpt = self.agg_pv_rated
-            return
+        print("---- into dg_pv_sync_func ----")
         
-        margin = 10000
-        ramp_up = 5000
-        ramp_down = 20000
-        deadband = 2000
+        if self.grid_state != gridState.off:
+            print(f"[DEBUG] Grid is ON. Checking transition timer. self.grid_return_time: {self.grid_return_time}")
+            
+            if self.grid_return_time == 0:
+                self.grid_return_time = time.time()
+                print(f"[DEBUG] Grid detected! Starting safe transition delay at {self.grid_return_time}")
+
+            elapsed_time = time.time() - self.grid_return_time
+            safe_delay = 60
+            print(f"[DEBUG] Elapsed time since grid return: {elapsed_time:.2f}s / {safe_delay}s")
+
+            if elapsed_time > safe_delay and self.aggDG <= 1000:
+                print(f"[DEBUG] Transition complete! DG is at {self.aggDG}W (<= 1000W). Unleashing PV to max rated: {self.agg_pv_rated}W")
+                self.pv_stpt = self.agg_pv_rated
+                return
+            else:
+                print(f"[DEBUG] Still in transition period. Elapsed: {elapsed_time:.2f}s, DG: {self.aggDG}W. Proceeding to protection math.")
+                pass
+        else:
+            if self.grid_return_time != 0:
+                print("[DEBUG] Grid is OFF. Resetting transition timer to 0.")
+            self.grid_return_time = 0
+
+        margin = 2000
+        ramp_up = 1000
+        deadband = 1000
+        print(f"[DEBUG] Constants - Margin: {margin}W, Ramp Up: {ramp_up}W, Deadband: {deadband}W")
 
         if not hasattr(self, "pv_stpt"):
             self.pv_stpt = 0
+            print("[DEBUG] pv_stpt attribute not found, initialized to 0W")
 
-        if self.grid_state != gridState.off and self.aggDG == 0:
-            print("grid is on and the power of grid is ",self.aggGrid)
-            if timer == 300:
-                self.pv_stpt = self.agg_pv_rated
-            else:
-                timer += 1
-                self.pv_stpt = self.agg_pv_rated
-            return
-        
-        if self.aggDG <= self.dg_lim:
+        print(f"[DEBUG] Current DG Power (aggDG): {self.aggDG}W")
+        print(f"[DEBUG] DG Limit (dg_lim): {self.dg_lim}W")
+        print(f"[DEBUG] Current PV Setpoint (pv_stpt): {self.pv_stpt}W")
+
+        if self.aggDG <= 10000: 
+            print(f"[DEBUG] EMERGENCY TRIP TRIGGERED! DG Power ({self.aggDG}W) <= 10000W. Setting PV to 0W instantly.")
             self.pv_stpt = 0
             return
 
         estimated_load = self.aggDG + self.aggPV
-        print("calculated estimated load dg + pv = ",estimated_load)
-        pv_allowed = estimated_load - self.dg_lim - margin
-        print("pv allowed is estimated load - dg limit = ",pv_allowed)
+        print(f"[DEBUG] Math: estimated_load = aggDG ({self.aggDG}W) + aggPV ({self.aggPV}W) = {estimated_load}W")
         
-        pv_allowed = max(min(pv_allowed, self.agg_pv_rated), 0)
-        print("final pv allowed is ",pv_allowed)
+        pv_allowed_raw = estimated_load - self.dg_lim - margin
+        print(f"[DEBUG] Math: pv_allowed_raw = estimated_load ({estimated_load}W) - dg_lim ({self.dg_lim}W) - margin ({margin}W) = {pv_allowed_raw}W")
+        
+        pv_allowed = max(min(pv_allowed_raw, self.agg_pv_rated), 0)
+        print(f"[DEBUG] Math: Clamped pv_allowed (Min: 0, Max: {self.agg_pv_rated}W) = {pv_allowed}W")
 
         diff = pv_allowed - self.pv_stpt
+        print(f"[DEBUG] Math: diff = pv_allowed ({pv_allowed}W) - current pv_stpt ({self.pv_stpt}W) = {diff}W")
 
-        if abs(diff) > deadband:
-            if diff > 0:
-                self.pv_stpt = min(self.pv_stpt + ramp_up, pv_allowed)
-            else:
-                self.pv_stpt = max(self.pv_stpt - ramp_down, pv_allowed)
+        if diff < -deadband:
+            print(f"[DEBUG] diff ({diff}W) < -deadband ({-deadband}W). FAST DROP initiated.")
+            self.pv_stpt = pv_allowed
+            print(f"[DEBUG] New pv_stpt set directly to {self.pv_stpt}W")
+        elif diff > deadband:
+            print(f"[DEBUG] diff ({diff}W) > deadband ({deadband}W). SLOW RAMP UP initiated.")
+            self.pv_stpt = min(self.pv_stpt + ramp_up, pv_allowed)
+            print(f"[DEBUG] New pv_stpt incremented by {ramp_up}W to {self.pv_stpt}W")
+        else:
+            print(f"[DEBUG] diff ({diff}W) is within deadband (+/- {deadband}W). Holding current pv_stpt at {self.pv_stpt}W.")
 
     def export_lim_export_priority_func(self):
         self.storage_stpt = min(0,self.aggBatt + min(0,self.ref+self.aggGrid))
@@ -1016,51 +1026,48 @@ def stopLiveData():
 
 def getActiveControlMode():
     print("----into getActiveControlMode----")
-    if(system_operating_details.aggDG > 0):
-        print("aggDG power : ",system_operating_details.aggDG)
-        system_operating_details.system_operating_mode = systemOperatingModes.dg_pv_sync
-        system_operating_details.controlFunc = system_operating_details.dg_pv_sync_func
-        system_operating_details.ref = system_operating_details.dg_lim
-    else:
-        print("agg_dg somehow got : ",system_operating_details.aggDG)
-        try:
-            with(open(CONTROL_JSON_PATH) as control_file):
-                control_json = json.load(control_file)
-                if("mode" in control_json):
-                    system_operating_details.system_operating_mode = getattr(systemOperatingModes,control_json["mode"])
-                    system_operating_details.controlFunc = getattr(system_operating_details,control_json["mode"] + "_func")
-                    if "ref" in control_json["op_details"]:
-                        system_operating_details.ref = control_json["op_details"]["ref"]
-                    else:
-                        system_operating_details.ref = 0  
-                    if "Limit_export" in control_json["op_details"]:
-                        system_operating_details.limit_export = control_json["op_details"]["Limit_export"]
-                    else:
-                        system_operating_details.limit_export = False
-                    system_operating_details.storage_min = -system_operating_details.agg_batt_rated
-                    if "batt_to_load" in  control_json["op_details"]:
-                        system_operating_details.storage_max = control_json["op_details"]["batt_to_load"] * system_operating_details.agg_batt_rated
-                    else:
-                        system_operating_details.storage_max = 0
-                    if "storage_min" in control_json["op_details"]:
-                        system_operating_details.storage_min = control_json["op_details"]["storage_min"] * system_operating_details.agg_batt_rated / 100
-                    else:
-                         system_operating_details.storage_min = -system_operating_details.agg_batt_rated
-                    if "storage_max" in control_json["op_details"]:
-                        system_operating_details.storage_max = control_json["op_details"]["storage_max"] * system_operating_details.agg_batt_rated / 100
-                    else:
-                        system_operating_details.storage_max = system_operating_details.agg_batt_rated
-                    if "solar_max" in control_json["op_details"]:
-                        system_operating_details.solar_max = control_json["op_details"]["solar_max"] * system_operating_details.agg_pv_rated / 100
-                    else:
-                        system_operating_details.solar_max  = system_operating_details.agg_pv_rated  
-                else:
-                    system_operating_details.controlFunc = None
-                    print("mode from json : ",system_operating_details.controlFunc)
-        except (json.JSONDecodeError, FileNotFoundError):
-            system_operating_details.controlFunc = None
-            print("Control JSON not found or invalid.")
-    print("func is",system_operating_details.controlFunc)
+    
+    print("Setting Control Mode to: dg_pv_sync (Running Continuously)")
+    system_operating_details.system_operating_mode = systemOperatingModes.dg_pv_sync
+    system_operating_details.controlFunc = system_operating_details.dg_pv_sync_func
+    system_operating_details.ref = system_operating_details.dg_lim
+
+    try:
+        with(open(CONTROL_JSON_PATH) as control_file):
+            control_json = json.load(control_file)
+            
+            op_details = control_json.get("op_details", {})
+            
+            system_operating_details.limit_export = op_details.get("Limit_export", False)
+            
+            if "batt_to_load" in op_details:
+                system_operating_details.storage_max = op_details["batt_to_load"] * system_operating_details.agg_batt_rated
+            else:
+                system_operating_details.storage_max = 0
+                
+            if "storage_min" in op_details:
+                system_operating_details.storage_min = op_details["storage_min"] * system_operating_details.agg_batt_rated / 100
+            else:
+                 system_operating_details.storage_min = -system_operating_details.agg_batt_rated
+                 
+            if "storage_max" in op_details:
+                system_operating_details.storage_max = op_details["storage_max"] * system_operating_details.agg_batt_rated / 100
+            else:
+                system_operating_details.storage_max = system_operating_details.agg_batt_rated
+                
+            if "solar_max" in op_details:
+                system_operating_details.solar_max = op_details["solar_max"] * system_operating_details.agg_pv_rated / 100
+            else:
+                system_operating_details.solar_max  = system_operating_details.agg_pv_rated  
+                
+    except (json.JSONDecodeError, FileNotFoundError):
+        print("Control JSON not found or invalid. Defaulting JSON limits.")
+        system_operating_details.limit_export = False
+        system_operating_details.storage_min = -system_operating_details.agg_batt_rated
+        system_operating_details.storage_max = system_operating_details.agg_batt_rated
+        system_operating_details.solar_max = system_operating_details.agg_pv_rated
+
+    print(f"Active func confirmed as: {system_operating_details.controlFunc}")
 
 def getAllData():
     data = {}
@@ -1089,13 +1096,6 @@ def getAllData():
                         value = model.value
                         if 'HT' in device_id_str and value < 0:
                             value *= -1
-                        
-                        # Capping logic: Only apply if rated_power is NOT the default 3800
-                        if getattr(device, 'rated_power', 0) > 0 and device.rated_power != 3800 and value > device.rated_power:
-                            print("total_power value exceeded taking previous value")
-                            value = model.prev_correct_value
-                        else:
-                            model.prev_correct_value = value
                         data[device_id_str][param] = value
                     elif param == 'total_energy':
                         current_energy = model.value
@@ -1241,15 +1241,22 @@ def runSysControlLoop():
     getAggDG()
     getAggGrid()
     
-    if abs(system_operating_details.aggDG) < 0.1:
-        print("aggDG is 0, controlling reactive power")
-        system_operating_details.controlGridPF()
+    system_operating_details.controlGridPF()
     
-    if system_operating_details.aggGrid > 0:
-        print("grid state is on and aggGrid power : ", system_operating_details.aggGrid)
-        system_operating_details.grid_state = gridState.on
-    else:
+    if system_operating_details.aggDG > 1000:
+        print(f"Grid state is OFF. DG is currently carrying the load: {system_operating_details.aggDG} W")
         system_operating_details.grid_state = gridState.off
+    else:
+        print("Grid state is ON. DG is inactive.")
+        system_operating_details.grid_state = gridState.on
+
+    if system_operating_details.prev_grid_state == gridState.on and system_operating_details.grid_state == gridState.off:
+        print("[EMERGENCY] Grid Failure Detected! DG is taking load. Resetting PV setpoints to 0 instantly.")
+        system_operating_details.pv_stpt = 0
+        system_operating_details.grid_return_time = 0 
+
+    system_operating_details.prev_grid_state = system_operating_details.grid_state
+
     getActiveControlMode()
     if system_operating_details.controlFunc != None:
         system_operating_details.controlFunc()

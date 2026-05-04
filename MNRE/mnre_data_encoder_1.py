@@ -61,6 +61,7 @@ def encode_dynamic_data():
 
 def encode_daq_data():
     dido_data = ctrl.getDIDOData()
+    fault_data = ctrl.getFaultData()
     payload = get_base_payload(12)
     
     for key, val in dido_data.items():

@@ -1,0 +1,19 @@
+{
+  "solar-inverter:SP-350K-INH:300007311248200206": {"type": "inverter", "index": 1},
+  "solar-inverter:SPI250K-B-H:501501078430m9100014": {"type": "inverter", "index": 2},
+  "solar-inverter:SG320HX-20:I2552100009": {"type": "inverter", "index": 3},
+  "solar-inverter:SP-275K-INH:300009002234100111": {"type": "inverter", "index": 4},
+  "solar-inverter:SPI250K-B-H:501501078430M9100010": {"type": "inverter", "index": 5},
+  "solar-inverter:SPI250K-B-H:501501078430M9100004": {"type": "inverter", "index": 6},
+  "solar-inverter:SG250HX:I2207200241": {"type": "inverter", "index": 7},
+  "solar-inverter:SG320HX:I2452000322": {"type": "inverter", "index": 8},
+  "solar-inverter:SG320HX:I2452000310": {"type": "inverter", "index": 9},
+  "solar-inverter:SG320HX:I2452000318": {"type": "inverter", "index": 10},
+  "solar-inverter:SG320HX:I2452000300": {"type": "inverter", "index": 11},
+  "solar-inverter:SG320HX:I2452000308": {"type": "inverter", "index": 12},
+  "solar-inverter:SG320HX:A2461105527": {"type": "inverter", "index": 13},
+  "solar-inverter:SG320HX:I2452000301": {"type": "inverter", "index": 14},
+  "solar-inverter:SG320HX:I2452000312": {"type": "inverter", "index": 15},
+  "HT:EM6400NG:3412843": {"type": "meter", "index": 1},
+  "LT:Secure:5842864": {"type": "meter", "index": 2}
+}

@@ -1,2 +1,2 @@
 1. Firmware Device ID Mismatch Issue - RTU simple_server and simple_client having dummy receiver and dummy viewer
-2.  
+2.  Solar Plant Power Factor Control Explained - https://gemini.google.com/share/2ec0b4cf0835

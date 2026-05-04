@@ -1,11 +1,3 @@
-'''DG-PV Control Base Code Update and Debug
-Control Base Code Update Request
-
-https://gemini.google.com/share/d5e8790c0a16
-
-https://gemini.google.com/share/d94dcd74e4ab'''
-
-
 import enum
 import math
 import logging
@@ -28,7 +20,6 @@ import os
 default_Ts = 3
 default_Ki = 0.0001
 default_Kp = 0.00001
-
 
 vpp_id: int = 0
 site_id: int = 0
@@ -513,7 +504,8 @@ class systemDevice:
                 self.writeDataToRegisters( mbus.bytes_to_registers(self.control_data.poweer_lt.encode()),self.control_data.poweer_lt.batch_start_addr + self.control_data.poweer_lt.offset)
             elif(self.control_data.power_pct_stpt.model_present):
                 print("----pct_stpt----")
-                self.control_data.power_pct_stpt.value = int(eval(msg_json['value'])*100/self.rated_power)
+                # Updated int() to round() to prevent truncation losses
+                self.control_data.power_pct_stpt.value = round(eval(msg_json['value'])*100/self.rated_power)
                 print("pct_stpt is : ",self.control_data.power_pct_stpt.value)
                 self.writeDataToRegisters( mbus.bytes_to_registers(self.control_data.power_pct_stpt.encode()),self.control_data.power_pct_stpt.batch_start_addr + self.control_data.power_pct_stpt.offset)
                 decoded = BinaryPayloadBuilder()
@@ -664,6 +656,7 @@ class operatingDetails:
     limit_export : bool
     live_data : bool = False
     live_data_timer : int = 0
+    grid_return_time : float = 0  # Added for grid transition state machine
 
     def __init__(self):
         self.aggDG = 0
@@ -675,7 +668,7 @@ class operatingDetails:
         self.pv_stpt = 0
         self.aggGrid_Q = 0
         self.aggPF = 0
-
+        self.grid_return_time = 0
 
     def controlGridPF(self):
         print("---- into controlGridPF ----")
@@ -686,7 +679,6 @@ class operatingDetails:
             print("DG is off")
             is_dg_on = False
 
-    
         PF_TARGET = 0.95
         PF_TOL = 0.02
         TAN_PHI_TARGET = 0.328   # tan(cos^-1(0.95))
@@ -707,13 +699,20 @@ class operatingDetails:
         Q = self.filtered_Q / 1000
         print(f"aggGrid is {P} KW and aggGrid_Q is {Q} kvar")
 
+        if P >= 0:
+            pf_target_signed = PF_TARGET     # import
+        else:
+            pf_target_signed = -PF_TARGET 
+
+        print(f"PF target based on direction is {pf_target_signed}")
+
         #Low power condition → disable PF control
         if abs(P) < 1:
             print(f"aggGrid is less than 0 {P} setting target_q_at_meter as 0")
             target_q_at_meter = 0
         
         #Check if PF already within acceptable range
-        if abs(abs(self.aggGrid_PF) - PF_TARGET) <= PF_TOL:
+        if abs(abs(self.aggGrid_PF) - pf_target_signed) <= PF_TOL:
             print(f"power_factor at grid is already at Target self.aggGrid_PF is {self.aggGrid_PF} so it will return as it is")
             return
 
@@ -731,7 +730,7 @@ class operatingDetails:
         print(f"q_correction is 0.5 * q_error = {q_correction}")
 
         # 🔸 6. Distribute to inverters
-        solar_devices = [d for d in device_list if d.device_type == deviceType.solar]
+        solar_devices = [d for d in device_list if d.device_type == deviceType.solar] 
         num_inv = len(solar_devices) if solar_devices else 1
         print(f"Total number of inverters {num_inv}")
 
@@ -755,7 +754,6 @@ class operatingDetails:
             # 🔸 8. Clamp as per inverter limit
             new_q_stpt = max(min(new_q_stpt, 55), -55)
             
-
             if is_dg_on:
                 new_q_stpt = 0
                 print("Setting reactive power 0")
@@ -840,48 +838,62 @@ class operatingDetails:
             self.pv_stpt = max(min(self.agg_pv_rated,self.aggDG + self.aggPV - self.dg_lim),0)
 
     def dg_pv_sync_func(self):
-        timer = 0
-        if self.grid_state != gridState.off and self.aggDG == 0:
-            print("grid is on and the power of grid is ",self.aggGrid)
-            self.pv_stpt = self.agg_pv_rated
-            return
-        
-        margin = 10000
-        ramp_up = 5000
-        ramp_down = 20000
-        deadband = 2000
+        # --- 1. THE GRID TRANSITION STATE MACHINE ---
+        if self.grid_state != gridState.off:
+            
+            # If timer is 0, the grid JUST came back. Start the clock.
+            if self.grid_return_time == 0:
+                self.grid_return_time = time.time()
+                print("Grid detected! Starting safe transition delay...")
+
+            # Calculate seconds passed since grid returned
+            elapsed_time = time.time() - self.grid_return_time
+            safe_delay = 60 # Set your DG cool-down/transfer delay in seconds
+
+            # Check if BOTH conditions are met to safely release solar
+            if elapsed_time > safe_delay and self.aggDG <= 1000:
+                print(f"Transition complete. DG is at {self.aggDG}W. Unleashing PV.")
+                self.pv_stpt = self.agg_pv_rated
+                return
+            else:
+                # We are still in the transition period!
+                # Do NOT return. We 'pass' and let the code fall through to the DG protection math below.
+                pass
+        else:
+            # Grid is OFF. Reset the timer so it's ready for the next transition.
+            self.grid_return_time = 0
+
+        # --- 2. DG PROTECTION LOGIC (Runs during Grid OFF *and* Transition) ---
+        margin = 2000
+        ramp_up = 1000
+        deadband = 1000
 
         if not hasattr(self, "pv_stpt"):
             self.pv_stpt = 0
 
-        if self.grid_state != gridState.off and self.aggDG == 0:
-            print("grid is on and the power of grid is ",self.aggGrid)
-            if timer == 300:
-                self.pv_stpt = self.agg_pv_rated
-            else:
-                timer += 1
-                self.pv_stpt = self.agg_pv_rated
-            return
-        
-        if self.aggDG <= self.dg_lim:
+        # EMERGENCY TRIP: If DG drops below 10 kW, instantly kill PV to prevent reverse power
+        if self.aggDG <= 10000: 
             self.pv_stpt = 0
             return
 
+        # SMOOTH CONTROL MATH
         estimated_load = self.aggDG + self.aggPV
         print("calculated estimated load dg + pv = ",estimated_load)
+        
         pv_allowed = estimated_load - self.dg_lim - margin
         print("pv allowed is estimated load - dg limit = ",pv_allowed)
         
+        # Clamp between 0 and Max Rated
         pv_allowed = max(min(pv_allowed, self.agg_pv_rated), 0)
         print("final pv allowed is ",pv_allowed)
 
         diff = pv_allowed - self.pv_stpt
 
-        if abs(diff) > deadband:
-            if diff > 0:
-                self.pv_stpt = min(self.pv_stpt + ramp_up, pv_allowed)
-            else:
-                self.pv_stpt = max(self.pv_stpt - ramp_down, pv_allowed)
+        # Asymmetric Ramp Logic
+        if diff < -deadband:
+            self.pv_stpt = pv_allowed  # Fast Drop
+        elif diff > deadband:
+            self.pv_stpt = min(self.pv_stpt + ramp_up, pv_allowed) # Slow Rise
 
     def export_lim_export_priority_func(self):
         self.storage_stpt = min(0,self.aggBatt + min(0,self.ref+self.aggGrid))
@@ -1089,13 +1101,6 @@ def getAllData():
                         value = model.value
                         if 'HT' in device_id_str and value < 0:
                             value *= -1
-                        
-                        # Capping logic: Only apply if rated_power is NOT the default 3800
-                        if getattr(device, 'rated_power', 0) > 0 and device.rated_power != 3800 and value > device.rated_power:
-                            print("total_power value exceeded taking previous value")
-                            value = model.prev_correct_value
-                        else:
-                            model.prev_correct_value = value
                         data[device_id_str][param] = value
                     elif param == 'total_energy':
                         current_energy = model.value
@@ -1241,9 +1246,8 @@ def runSysControlLoop():
     getAggDG()
     getAggGrid()
     
-    if abs(system_operating_details.aggDG) < 0.1:
-        print("aggDG is 0, controlling reactive power")
-        system_operating_details.controlGridPF()
+
+    system_operating_details.controlGridPF()
     
     if system_operating_details.aggGrid > 0:
         print("grid state is on and aggGrid power : ", system_operating_details.aggGrid)

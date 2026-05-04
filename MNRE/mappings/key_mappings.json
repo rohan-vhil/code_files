@@ -1,0 +1,32 @@
+{
+  "inverter": {
+    "acfreq": "IFREQ",
+    "power_factor": "IPF",
+    "total_power": "IKW",
+    "total_energy": "ILKWH",
+    "today_energy": "ITKWH",
+    "temperature": "ITEMP",
+    "apparent_power": "IKVA",
+    "reactive_power": "IKVAR",
+    "L1_voltage": "IRPHV",
+    "L1_current": "IRPHI",
+    "L2_voltage": "IYPHV",
+    "L2_current": "IYPHI",
+    "L3_voltage": "IBPHV",
+    "L3_current": "IBPHI"
+  },
+  "meter": {
+    "L1_voltage": "VRN",
+    "L1_current": "IR",
+    "L2_voltage": "VYN",
+    "L2_current": "IY",
+    "L3_voltage": "VBN",
+    "L3_current": "IB",
+    "total_power": "POW",
+    "total_energy": "KWHNET",
+    "acfreq": "FRQ",
+    "apparent_power": "APOW",
+    "reactive_power": "RPOW",
+    "power_factor": "PF"
+  }
+}
