@@ -15,7 +15,7 @@ from getmac import get_mac_address as gma
 # Import the FaultProcessor from your fault reporting script
 from fault_reporting import FaultProcessor
 # # NEW: Import the DeviceStatusReporter for online/offline status reporting
-# from device_status_reporter import DeviceStatusReporter
+from device_status_reporter import DeviceStatusReporter
 from mqtt_master import subscribe
 from mqtt_master import livedata
 
@@ -241,7 +241,7 @@ if __name__ == "__main__":
     fault_processor = FaultProcessor(error_codes_path=error_codes_path, poll_interval=10)
     
     # # NEW: Instantiate the Device Status Reporter
-    # status_reporter = DeviceStatusReporter(poll_interval=60) # Checks every 60 seconds
+    status_reporter = DeviceStatusReporter(poll_interval=60) # Checks every 60 seconds
 
     # Define all threads
     t1 = threading.Thread(target=getData)
@@ -249,7 +249,7 @@ if __name__ == "__main__":
     t3 = threading.Thread(target=fault_processor.run)
     tmqtt = threading.Thread(target=subscribe.start_subscriber)
     # NEW: Define the thread for device status reporting
-    # t4 = threading.Thread(target=status_reporter.run)
+    t4 = threading.Thread(target=status_reporter.run)
 
     # Start all threads
     t1.start()
@@ -257,7 +257,7 @@ if __name__ == "__main__":
     t3.start()
     tmqtt.start()
     # NEW: Start the new thread
-    # t4.start()
+    t4.start()
 
     print("All threads started: Data Acquisition, Report Handling, Fault Processing, and Device Status Reporting.")
 
@@ -267,6 +267,6 @@ if __name__ == "__main__":
     t3.join()
     tmqtt.join()
     # NEW: Join the new thread
-    # t4.join()
+    t4.join()
     
     print("All threads have completed.")

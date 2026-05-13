@@ -1,0 +1,5 @@
+1. Anomaly Detection for Solar Data - https://gemini.google.com/share/fa847a1fd562
+2. Anomaly Detection Explained - https://chatgpt.com/share/6a040172-69ec-83e9-a584-2ca6a4349962
+3. Model Chaining for Anomaly Detection - https://chatgpt.com/share/6a0401b4-bd9c-83e8-a53b-479978965b00
+4. Isolation Forest for Anomalies - https://chatgpt.com/share/6a040204-06ac-83ec-ad65-91070ec0f79b
+5. Anomaly Detection for Firmware - https://gemini.google.com/share/2d7f32c07a07

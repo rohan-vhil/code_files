@@ -1,2 +1,7 @@
 1. Firmware Device ID Mismatch Issue - RTU simple_server and simple_client having dummy receiver and dummy viewer
-2.  Solar Plant Power Factor Control Explained - https://gemini.google.com/share/2ec0b4cf0835
+2. Solar Plant Power Factor Control Explained - https://gemini.google.com/share/2ec0b4cf0835
+3. IEC 60870-5-104 Solar Plant Point Map - https://gemini.google.com/share/b1d752a0d29b
+4. MNRE-like Topic Structure - https://chatgpt.com/share/69f5be6e-0d88-83e8-bb41-e2106e52ef2a
+5. IEC 104 Protocol Explaination - https://chatgpt.com/share/69f5be9c-1040-83e8-b507-45db863e84e4
+6. MNRE SLDC MQTT Broker - https://chatgpt.com/share/69f5bed3-f10c-83e8-9a4b-00c07f2b5f7d
+7. OTP in MNRE Solar - https://chatgpt.com/share/69f5db53-ace8-83e8-8073-a3b93b26caac
