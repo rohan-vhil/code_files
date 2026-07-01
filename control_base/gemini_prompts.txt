@@ -5,3 +5,6 @@
 5. IEC 104 Protocol Explaination - https://chatgpt.com/share/69f5be9c-1040-83e8-b507-45db863e84e4
 6. MNRE SLDC MQTT Broker - https://chatgpt.com/share/69f5bed3-f10c-83e8-9a4b-00c07f2b5f7d
 7. OTP in MNRE Solar - https://chatgpt.com/share/69f5db53-ace8-83e8-8073-a3b93b26caac
+8. Configure Switch DHCP for Office Network - https://gemini.google.com/share/5569eb308fd8
+9. VLAN Segmentation for SCADA - https://gemini.google.com/share/6e96d090a3e0
+10. TP-Link switch VLAN configuration for SCADA system - https://claude.ai/share/6d77da1c-b5cb-414f-8d79-4df9319e612a
